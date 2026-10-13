@@ -1,0 +1,2359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everlit — Fix what matters first</title>
+<link rel="icon" type="image/svg+xml" href="everlit-icon.svg">
+<meta name="description" content="An interactive walkthrough of Everlit: context-aware vulnerability prioritization, from entitlements to a verified fix.">
+<meta name="color-scheme" content="light dark">
+<style>
+/* ------------------------------------------------------------------ tokens */
+:root{
+  --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,Menlo,monospace;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-in-out:cubic-bezier(0.77,0,0.175,1);
+
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f1f5f9; --surface-3:#e9eef5;
+  --fg:#0f172a; --fg-2:#334155; --muted:#64748b; --faint:#94a3b8;
+  --border:#e2e8f0; --border-strong:#cbd5e1; --track:#e2e8f0; --grid:rgba(15,23,42,.05);
+  --accent:#4f46e5; --accent-hover:#4338ca; --accent-fg:#ffffff; --accent-soft:rgba(79,70,229,.08); --accent-ring:rgba(79,70,229,.35);
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 4px 16px -6px rgba(15,23,42,.08);
+  --shadow-lg:0 1px 2px rgba(15,23,42,.04),0 12px 40px -12px rgba(15,23,42,.18);
+  --console-bg:#0b1120; --console-fg:#cbd5e1; --console-muted:#64748b;
+
+  /* categorical series — dataviz reference palette, validated (light, surface #fff) */
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+
+  /* status (priority) — app palette: rose / orange / amber / slate; always icon + label */
+  --crit:#e11d48; --crit-fg:#be123c; --crit-bg:#fff1f2; --crit-bd:#fecdd3;
+  --high:#ea580c; --high-fg:#c2410c; --high-bg:#fff7ed; --high-bd:#fed7aa;
+  --med:#d97706;  --med-fg:#b45309;  --med-bg:#fffbeb;  --med-bd:#fde68a;
+  --low:#94a3b8;  --low-fg:#475569;  --low-bg:#f1f5f9;  --low-bd:#e2e8f0;
+  --good:#059669; --good-fg:#047857; --good-bg:#ecfdf5; --good-bd:#a7f3d0;
+  --info-fg:#4338ca; --info-bg:#eef2ff; --info-bd:#c7d2fe;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1120; --surface:#111827; --surface-2:#0f172a; --surface-3:#1e293b;
+    --fg:#e2e8f0; --fg-2:#cbd5e1; --muted:#94a3b8; --faint:#64748b;
+    --border:#1f2937; --border-strong:#334155; --track:#1f2937; --grid:rgba(226,232,240,.04);
+    --accent:#818cf8; --accent-hover:#a5b4fc; --accent-fg:#0b1120; --accent-soft:rgba(129,140,248,.12); --accent-ring:rgba(129,140,248,.45);
+    --shadow:0 1px 2px rgba(0,0,0,.3); --shadow-lg:0 12px 40px -12px rgba(0,0,0,.6);
+    --console-bg:#060a14;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+    --crit:#f43f5e; --crit-fg:#fda4af; --crit-bg:rgba(244,63,94,.12); --crit-bd:rgba(244,63,94,.32);
+    --high:#f97316; --high-fg:#fdba74; --high-bg:rgba(249,115,22,.12); --high-bd:rgba(249,115,22,.32);
+    --med:#f59e0b;  --med-fg:#fcd34d;  --med-bg:rgba(245,158,11,.12);  --med-bd:rgba(245,158,11,.32);
+    --low:#64748b;  --low-fg:#cbd5e1;  --low-bg:rgba(148,163,184,.12); --low-bd:rgba(148,163,184,.28);
+    --good:#10b981; --good-fg:#6ee7b7; --good-bg:rgba(16,185,129,.12); --good-bd:rgba(16,185,129,.32);
+    --info-fg:#c7d2fe; --info-bg:rgba(129,140,248,.12); --info-bd:rgba(129,140,248,.32);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1120; --surface:#111827; --surface-2:#0f172a; --surface-3:#1e293b;
+  --fg:#e2e8f0; --fg-2:#cbd5e1; --muted:#94a3b8; --faint:#64748b;
+  --border:#1f2937; --border-strong:#334155; --track:#1f2937; --grid:rgba(226,232,240,.04);
+  --accent:#818cf8; --accent-hover:#a5b4fc; --accent-fg:#0b1120; --accent-soft:rgba(129,140,248,.12); --accent-ring:rgba(129,140,248,.45);
+  --shadow:0 1px 2px rgba(0,0,0,.3); --shadow-lg:0 12px 40px -12px rgba(0,0,0,.6);
+  --console-bg:#060a14;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+  --crit:#f43f5e; --crit-fg:#fda4af; --crit-bg:rgba(244,63,94,.12); --crit-bd:rgba(244,63,94,.32);
+  --high:#f97316; --high-fg:#fdba74; --high-bg:rgba(249,115,22,.12); --high-bd:rgba(249,115,22,.32);
+  --med:#f59e0b;  --med-fg:#fcd34d;  --med-bg:rgba(245,158,11,.12);  --med-bd:rgba(245,158,11,.32);
+  --low:#64748b;  --low-fg:#cbd5e1;  --low-bg:rgba(148,163,184,.12); --low-bd:rgba(148,163,184,.28);
+  --good:#10b981; --good-fg:#6ee7b7; --good-bg:rgba(16,185,129,.12); --good-bd:rgba(16,185,129,.32);
+  --info-fg:#c7d2fe; --info-bg:rgba(129,140,248,.12); --info-bd:rgba(129,140,248,.32);
+}
+
+/* ------------------------------------------------------------------ base */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:clip;-webkit-tap-highlight-color:transparent}
+h1,h2,h3,h4,p{margin:0}
+a{color:inherit}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+::selection{background:var(--accent-ring)}
+code,.mono{font-family:var(--mono);font-size:.92em}
+.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+.i-lg{width:20px;height:20px}
+[hidden]{display:none !important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+@media (min-width:640px){.wrap{padding:0 24px}}
+
+/* ------------------------------------------------------------------ nav */
+.nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 78%,transparent);-webkit-backdrop-filter:saturate(1.6) blur(12px);backdrop-filter:saturate(1.6) blur(12px);border-bottom:1px solid transparent;transition:border-color 200ms ease}
+.nav.scrolled{border-bottom-color:var(--border)}
+.nav .wrap{display:flex;align-items:center;gap:24px;height:60px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:650;letter-spacing:-.01em;text-decoration:none;font-size:15px}
+.brand-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accent-fg)}
+.brand-mark .i{width:16px;height:16px}
+.nav-links{display:none;gap:2px;margin-left:8px}
+.nav-links a{font-size:14px;color:var(--muted);text-decoration:none;padding:6px 9px;white-space:nowrap;border-radius:8px;transition:color 150ms ease,background-color 150ms ease}
+.nav-links a[aria-current="true"]{color:var(--fg);background:var(--surface-3)}
+@media (hover:hover) and (pointer:fine){.nav-links a:hover{color:var(--fg)}}
+@media (min-width:1080px){.nav-links{display:flex}}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.icon-btn{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--fg-2);transition:transform 160ms var(--ease-out),border-color 150ms ease}
+.icon-btn:active{transform:scale(.95)}
+@media (hover:hover) and (pointer:fine){.icon-btn:hover{border-color:var(--border-strong)}}
+
+/* ------------------------------------------------------------------ buttons, badges */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;border:1px solid transparent;font-size:14px;font-weight:550;text-decoration:none;white-space:nowrap;transition:transform 160ms var(--ease-out),background-color 150ms ease,border-color 150ms ease,color 150ms ease;user-select:none}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:var(--accent-fg)}
+.btn-secondary{background:var(--surface);border-color:var(--border);color:var(--fg)}
+.btn-ghost{background:transparent;color:var(--fg-2);border-color:var(--border)}
+.btn-sm{height:32px;padding:0 12px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+@media (hover:hover) and (pointer:fine){
+  .btn-primary:hover{background:var(--accent-hover)}
+  .btn-secondary:hover,.btn-ghost:hover{border-color:var(--border-strong)}
+}
+.badge{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;border:1px solid;font-size:12px;font-weight:600;white-space:nowrap;line-height:1}
+.badge .i{width:13px;height:13px;vertical-align:0}
+.sev-critical{color:var(--crit-fg);background:var(--crit-bg);border-color:var(--crit-bd)}
+.sev-high{color:var(--high-fg);background:var(--high-bg);border-color:var(--high-bd)}
+.sev-medium{color:var(--med-fg);background:var(--med-bg);border-color:var(--med-bd)}
+.sev-low{color:var(--low-fg);background:var(--low-bg);border-color:var(--low-bd)}
+.tone-good{color:var(--good-fg);background:var(--good-bg);border-color:var(--good-bd)}
+.tone-bad{color:var(--crit-fg);background:var(--crit-bg);border-color:var(--crit-bd)}
+.tone-warn{color:var(--med-fg);background:var(--med-bg);border-color:var(--med-bd)}
+.tone-info{color:var(--info-fg);background:var(--info-bg);border-color:var(--info-bd)}
+.tone-neutral{color:var(--low-fg);background:var(--low-bg);border-color:var(--low-bd)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:12.5px;color:var(--fg-2);white-space:nowrap}
+.kbd{font-family:var(--mono);font-size:12px;padding:1px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg-2)}
+
+/* ------------------------------------------------------------------ sections */
+section{padding:64px 0;position:relative}
+@media (min-width:900px){section{padding:96px 0}}
+.band{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.eyebrow .num{font-family:var(--mono);color:var(--muted);letter-spacing:0}
+h2.title{font-size:clamp(28px,2.4vw + 16px,44px);line-height:1.1;letter-spacing:-.028em;font-weight:650;text-wrap:balance;max-width:20ch}
+.lede{margin-top:14px;color:var(--muted);font-size:17px;line-height:1.6;max-width:62ch;text-wrap:pretty}
+.head{margin-bottom:40px}
+.head-row{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
+.band .card{background:var(--bg)}
+.card-pad{padding:20px}
+@media (min-width:640px){.card-pad{padding:24px}}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.tnum{font-variant-numeric:tabular-nums}
+.label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;text-transform:uppercase}
+.proposed{text-transform:none;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:600;color:var(--info-fg);background:var(--info-bg);border:1px dashed var(--info-bd)}
+
+/* reveal on scroll */
+.js .reveal{opacity:0;transform:translateY(8px);transition:opacity 300ms var(--ease-out),transform 300ms var(--ease-out);transition-delay:calc(var(--i,0) * 50ms)}
+.js .reveal.in{opacity:1;transform:none}
+
+/* ------------------------------------------------------------------ hero */
+.hero{padding:72px 0 64px;overflow:hidden}
+@media (min-width:900px){.hero{padding:112px 0 96px}}
+.hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:44px 44px;-webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 0%,#000 30%,transparent 75%);mask-image:radial-gradient(ellipse 70% 60% at 50% 0%,#000 30%,transparent 75%);pointer-events:none}
+.hero::after{content:"";position:absolute;left:50%;top:-220px;width:900px;height:520px;transform:translateX(-50%);background:radial-gradient(closest-side,var(--accent-soft),transparent);filter:blur(10px);pointer-events:none}
+.hero .wrap{position:relative;z-index:1;display:grid;gap:48px;align-items:center}
+@media (min-width:980px){.hero .wrap{grid-template-columns:1.05fr .95fr}}
+.pill-link{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px 0 6px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font-size:13px;color:var(--fg-2);text-decoration:none;margin-bottom:24px}
+.pill-link .tag{height:20px;padding:0 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:12px;display:inline-flex;align-items:center}
+h1{font-size:clamp(36px,3.6vw + 14px,56px);line-height:1.03;letter-spacing:-.04em;font-weight:680;text-wrap:balance}
+h1 .soft{color:var(--muted);font-weight:600}
+h1 .accent{color:var(--accent)}
+.hero-sub{margin-top:20px;font-size:18px;color:var(--muted);max-width:52ch;text-wrap:pretty}
+.hero-cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:32px;font-size:13px;color:var(--muted)}
+.hero-meta span{display:inline-flex;align-items:center;gap:6px}
+.hero-meta .i{color:var(--good)}
+
+.finding{padding:20px;box-shadow:var(--shadow-lg)}
+.finding-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.finding h3{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.finding .sub{font-size:13px;color:var(--muted);margin-top:2px}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.versus > div{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface-2)}
+.versus .v-num{font-size:30px;font-weight:650;letter-spacing:-.03em;line-height:1.1;margin:4px 0 6px}
+.versus .v-num small{font-size:14px;color:var(--muted);font-weight:500;letter-spacing:0}
+.versus .win{background:var(--surface);border-color:var(--accent-ring);box-shadow:0 0 0 3px var(--accent-soft)}
+.why{display:grid;gap:8px;margin-top:14px}
+.why-row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;font-size:13px;color:var(--fg-2)}
+.why-row b{font-weight:600;color:var(--fg)}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.finding-foot{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+
+/* stacked score bar (dataviz: 2px surface gap, <=24px thick, 4px rounded data-end, square baseline) */
+.sbar{position:relative;height:12px;border-radius:0 4px 4px 0;background:var(--track)}
+.sbar-lg{height:24px}
+.sbar .seg-fill{position:absolute;inset:0;clip-path:inset(0 100% 0 0);transition:clip-path 120ms var(--ease-out)}
+.sbar .ghost{position:absolute;inset:0;background:repeating-linear-gradient(135deg,var(--border-strong) 0 2px,transparent 2px 6px);clip-path:inset(0 100% 0 0);transition:clip-path 120ms var(--ease-out)}
+.sbar.slow .seg-fill,.sbar.slow .ghost{transition-duration:500ms}
+
+/* ------------------------------------------------------------------ problem cards */
+.grid-3{display:grid;gap:16px}
+@media (min-width:820px){.grid-3{grid-template-columns:repeat(3,1fr)}}
+.feature .ficon{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);margin-bottom:16px}
+.feature h3{font-size:16px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+.feature p{font-size:14.5px;color:var(--muted)}
+.feature .answer{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:13.5px;color:var(--fg-2);display:flex;gap:8px}
+.feature .answer .i{color:var(--good);margin-top:3px}
+
+/* ------------------------------------------------------------------ lifecycle */
+.roles{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px;align-items:center}
+.roles .label{margin-right:6px}
+.rchip{position:relative}
+.rchip input{position:absolute;opacity:0;pointer-events:none}
+.rchip span{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font-size:13px;font-weight:500;color:var(--fg-2);cursor:pointer;transition:transform 160ms var(--ease-out),background-color 150ms ease,border-color 150ms ease,color 150ms ease;user-select:none}
+.rchip span:active{transform:scale(.97)}
+.rchip input:checked + span{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.rchip input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+.rchip-agent span{border-style:dashed}
+@media (hover:hover) and (pointer:fine){.rchip span:hover{border-color:var(--border-strong)}}
+
+.rail{position:relative;display:grid;grid-template-columns:repeat(10,1fr);margin-bottom:24px}
+.rail-line{position:absolute;left:5%;right:5%;top:15px;height:2px;background:var(--border)}
+.rail-fill{position:absolute;inset:0;background:var(--accent);transform-origin:left;transform:scaleX(0);transition:transform 500ms var(--ease-in-out)}
+.rail-step{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:0;padding:0 2px;color:var(--muted);font-size:12px;font-weight:500;text-align:center;line-height:1.25}
+.rail-step .rdot{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--surface);border:1.5px solid var(--border-strong);color:var(--muted);transition:transform 160ms var(--ease-out),background-color 200ms ease,border-color 200ms ease,color 200ms ease}
+.rail-step .rdot .i{width:15px;height:15px}
+.rail-step:active .rdot{transform:scale(.94)}
+.rail-step.done .rdot{border-color:var(--accent);color:var(--accent)}
+.rail-step[aria-selected="true"] .rdot{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);box-shadow:0 0 0 4px var(--accent-soft)}
+.rail-step[aria-selected="true"]{color:var(--fg)}
+.rail-step .rlbl{display:none}
+@media (min-width:860px){.rail-step .rlbl{display:block}}
+.rail-step:focus-visible{outline:none}
+.rail-step:focus-visible .rdot{outline:2px solid var(--accent);outline-offset:3px}
+
+.stage{display:grid;gap:16px}
+@media (min-width:900px){.stage{grid-template-columns:1.25fr 1fr}}
+.stage-main{padding:24px}
+@media (min-width:640px){.stage-main{padding:28px}}
+.stage-kicker{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.stage h3{font-size:24px;font-weight:650;letter-spacing:-.02em;margin:6px 0 16px;text-wrap:balance}
+.stage ul{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.stage li{display:grid;grid-template-columns:18px 1fr;gap:10px;font-size:15px;color:var(--fg-2)}
+.stage li .i{color:var(--accent);margin-top:4px;width:15px;height:15px}
+.example{margin-top:20px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);padding:12px 14px;font-family:var(--mono);font-size:12.5px;color:var(--fg-2);overflow-wrap:anywhere}
+.example .label{display:block;font-family:var(--sans);margin-bottom:6px}
+.audit{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.audit code{color:var(--fg-2);overflow-wrap:anywhere}
+.stage-nav{display:flex;gap:8px;margin-top:24px;flex-wrap:wrap}
+.stage-link{display:inline-flex;align-items:center;gap:6px;margin-top:16px;font-size:14px;font-weight:550;color:var(--accent);text-decoration:none}
+.perm{padding:24px}
+.perm h4{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.perm .perm-sub{font-size:13px;color:var(--muted);margin-bottom:16px}
+.perm ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.perm li{display:grid;grid-template-columns:22px 1fr;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-size:14px}
+.perm li .pi{display:grid;place-items:center;width:22px;height:22px;border-radius:50%}
+.perm li .pi .i{width:13px;height:13px;stroke-width:2.5}
+.perm li.yes .pi{background:var(--good-bg);color:var(--good-fg)}
+.perm li.no .pi{background:var(--crit-bg);color:var(--crit-fg)}
+.perm li.no .pname{color:var(--muted)}
+.perm li .why2{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.perm .scope-note{margin-top:14px;font-size:12.5px;color:var(--muted);display:flex;gap:8px}
+.pages{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.pages .chip.off{opacity:.45;text-decoration:line-through}
+.panel-swap{animation:swap 260ms var(--ease-out)}
+@keyframes swap{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ------------------------------------------------------------------ playground */
+.play{display:grid;gap:16px}
+@media (min-width:900px){.play{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}}
+.controls{padding:24px;display:grid;gap:22px;align-content:start}
+.ctrl-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+.ctrl-head label,.ctrl-head .ctrl-name{font-size:14px;font-weight:550}
+.ctrl-head output{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.ctrl-hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+.ctrl-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.ctrl-row + .ctrl-row{margin-top:12px}
+.range{-webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;margin:0;cursor:pointer;--fill:50%}
+.range::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--accent) 0 var(--fill),var(--track) var(--fill) 100%)}
+.range::-moz-range-track{height:6px;border-radius:999px;background:var(--track)}
+.range::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
+.range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid rgba(15,23,42,.15);box-shadow:0 1px 3px rgba(15,23,42,.25);margin-top:-7px;transition:transform 160ms var(--ease-out)}
+.range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid rgba(15,23,42,.15);box-shadow:0 1px 3px rgba(15,23,42,.25);transition:transform 160ms var(--ease-out)}
+.range:active::-webkit-slider-thumb{transform:scale(1.12)}
+.range:active::-moz-range-thumb{transform:scale(1.12)}
+.range:focus-visible{outline:none}
+.range:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(--accent-ring)}
+.range:focus-visible::-moz-range-thumb{box-shadow:0 0 0 4px var(--accent-ring)}
+.range:disabled{opacity:.35;cursor:not-allowed}
+.switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch .track{position:relative;width:38px;height:22px;border-radius:999px;background:var(--border-strong);transition:background-color 200ms ease;flex:none}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform 200ms var(--ease-out)}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track::after{transform:translateX(16px)}
+.switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
+.switch .sw-text{font-size:14px;font-weight:550}
+.seg{position:relative;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px}
+.band .seg{background:var(--surface-3)}
+.seg-pill{position:absolute;top:3px;bottom:3px;left:3px;width:calc((100% - 6px) / var(--n));background:var(--surface);border-radius:7px;box-shadow:0 1px 2px rgba(15,23,42,.08),0 0 0 1px var(--border);transform:translateX(calc(var(--idx,0) * 100%));transition:transform 200ms var(--ease-in-out)}
+.seg label{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;min-height:32px;padding:4px 6px;border-radius:7px;font-size:13px;font-weight:550;color:var(--muted);cursor:pointer;text-align:center;line-height:1.2;transition:color 150ms ease;user-select:none}
+.seg label > span{display:inline-block;transition:transform 160ms var(--ease-out)}
+.seg label:active > span{transform:scale(.96)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){color:var(--fg)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-1px}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.preset{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font-size:13px;font-weight:500;color:var(--fg-2);transition:transform 160ms var(--ease-out),border-color 150ms ease,background-color 150ms ease}
+.preset:active{transform:scale(.97)}
+.preset[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--fg)}
+@media (hover:hover) and (pointer:fine){.preset:hover{border-color:var(--border-strong)}}
+
+.result{padding:24px;display:flex;flex-direction:column;gap:20px}
+.score-row{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.hero-fig{font-size:clamp(64px,6vw + 20px,88px);font-weight:680;letter-spacing:-.05em;line-height:.9}
+.hero-fig small{font-size:18px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:4px}
+.score-meta{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.vs-cvss{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.ticks{position:relative;height:30px;margin-bottom:6px}
+.tick{position:absolute;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);white-space:nowrap}
+.tick::after{content:"";width:1px;height:6px;background:var(--border-strong)}
+.tick-lines{position:absolute;inset:0;pointer-events:none}
+.tick-lines span{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--fg);opacity:.25;z-index:2}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 16px}
+.legend-item{display:grid;grid-template-columns:10px 1fr auto;gap:8px;align-items:center;font-size:13px;color:var(--fg-2)}
+.legend-item b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--fg)}
+.legend-item.zero{opacity:.5}
+.devnote{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--fg-2);padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border)}
+.devnote .sw{width:18px;height:10px;border-radius:2px;background:repeating-linear-gradient(135deg,var(--border-strong) 0 2px,transparent 2px 6px);flex:none}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+.tbl th{font-size:12px;color:var(--muted);font-weight:600}
+.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums}
+.linkish{background:none;border:0;padding:0;color:var(--accent);font-size:13px;font-weight:550;display:inline-flex;align-items:center;gap:6px}
+
+.outcome{display:grid;gap:16px;margin-top:16px}
+@media (min-width:820px){.outcome{grid-template-columns:repeat(3,1fr)}}
+.oc{padding:20px}
+.oc .label{display:flex;align-items:center;gap:6px;margin-bottom:12px}
+.oc-big{font-size:20px;font-weight:650;letter-spacing:-.02em;display:flex;align-items:center;gap:10px;line-height:1.2}
+.oc-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;flex:none}
+.oc-icon .i{width:18px;height:18px}
+.oc p{font-size:13.5px;color:var(--muted);margin-top:10px}
+.oc .rule{margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--fg-2)}
+.policy-edit{margin-top:16px}
+.policy-edit summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:550;color:var(--fg-2);padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);transition:transform 160ms var(--ease-out)}
+.policy-edit summary::-webkit-details-marker{display:none}
+.policy-edit summary:active{transform:scale(.98)}
+.policy-edit[open] summary .chev{transform:rotate(180deg)}
+.policy-edit summary .chev{transition:transform 200ms var(--ease-out)}
+.policy-grid{display:grid;gap:16px;margin-top:12px}
+@media (min-width:820px){.policy-grid{grid-template-columns:1.4fr 1fr}}
+.num-in{width:72px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);padding:0 8px;font-variant-numeric:tabular-nums;text-align:right}
+.num-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tbl input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.tbl tr.hit td{background:var(--accent-soft)}
+
+/* ------------------------------------------------------------------ comparison */
+.cmp-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.cmp-toolbar .seg{width:260px}
+.cmp{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cmp-row{display:grid;grid-template-columns:36px minmax(0,1fr);gap:4px 12px;align-items:center;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--surface);transition:border-color 150ms ease,box-shadow 150ms ease}
+.band .cmp-row{background:var(--bg)}
+.cmp-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (hover:hover) and (pointer:fine){.cmp-row:hover{border-color:var(--border-strong);box-shadow:var(--shadow)}}
+.rank{font-size:15px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--muted);display:flex;flex-direction:column;align-items:flex-start;line-height:1.1}
+.delta{font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:1px;margin-top:3px}
+.delta .i{width:11px;height:11px;stroke-width:2.6}
+.delta.up{color:var(--crit-fg)} .delta.down{color:var(--good-fg)} .delta.same{color:var(--faint)}
+.cmp-title b{display:block;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.cmp-title span{font-size:12.5px;color:var(--muted)}
+.cmp-meta{grid-column:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin-top:8px}
+.cmp-cell .label{font-size:10.5px;display:block;margin-bottom:4px}
+.cmp-cell .val{display:flex;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.meter{position:relative;flex:1;min-width:48px;height:6px;border-radius:0 3px 3px 0;background:var(--track);overflow:hidden}
+.meter i{position:absolute;inset:0;transform-origin:left;border-radius:0 3px 3px 0}
+@media (min-width:900px){
+  .cmp-row{grid-template-columns:40px minmax(0,1.5fr) minmax(0,2.6fr)}
+  .cmp-meta{grid-column:auto;grid-template-columns:1fr 1.25fr .6fr .7fr;margin-top:0}
+}
+.cmp-legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;font-size:12.5px;color:var(--muted)}
+.cmp-legend span{display:inline-flex;align-items:center;gap:6px}
+
+/* ------------------------------------------------------------------ agents */
+.agent-top{display:grid;gap:16px;margin-bottom:16px}
+@media (min-width:900px){.agent-top{grid-template-columns:1fr auto;align-items:end}}
+.scen{display:flex;flex-wrap:wrap;gap:8px}
+.why-human{padding:14px 16px;border-radius:12px;border:1px solid var(--med-bd);background:var(--med-bg);color:var(--fg-2);font-size:13.5px;display:flex;gap:10px;margin-bottom:16px}
+.why-human .i{color:var(--med-fg);margin-top:3px}
+.why-human b{color:var(--fg);font-weight:600}
+.why-human q{font-family:var(--mono);font-size:12.5px;quotes:"\201C" "\201D"}
+.ctrl-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.squad{position:relative;display:grid;gap:10px;margin-bottom:16px}
+@media (min-width:900px){.squad{grid-template-columns:repeat(5,1fr);padding-top:34px}}
+.retry-arc{display:none;position:absolute;top:0;height:34px;pointer-events:none;color:var(--med)}
+@media (min-width:900px){.retry-arc{display:block;left:30%;width:20%}}
+.retry-arc svg{width:100%;height:100%;overflow:visible}
+.retry-arc path{fill:none;stroke:currentColor;stroke-width:1.75;stroke-dasharray:4 4}
+.retry-arc .wrap-clip{clip-path:inset(0 0 0 100%);transition:clip-path 600ms var(--ease-in-out)}
+.retry-arc.on .wrap-clip{clip-path:inset(0 0 0 0)}
+.retry-arc .rlabel{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:600;color:var(--med-fg);background:var(--bg);padding:0 6px;white-space:nowrap;opacity:0;transition:opacity 200ms ease}
+.band .retry-arc .rlabel{background:var(--surface)}
+.retry-arc.on .rlabel{opacity:1}
+.agent{position:relative;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--surface);display:grid;grid-template-columns:36px 1fr;gap:4px 12px;align-items:center;transition:border-color 200ms ease,box-shadow 200ms ease,opacity 200ms ease}
+.band .agent{background:var(--bg)}
+@media (min-width:900px){.agent{grid-template-columns:1fr;align-items:start;padding:16px}}
+.agent .aicon{position:relative;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);color:var(--fg-2);grid-row:span 2}
+@media (min-width:900px){.agent .aicon{grid-row:auto;margin-bottom:8px}}
+.agent .aicon::after{content:"";position:absolute;inset:-4px;border-radius:13px;border:2px solid var(--accent);opacity:0}
+.agent b{font-size:14px;font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.agent .arole{font-size:12.5px;color:var(--muted);line-height:1.4}
+.agent .astate{position:absolute;top:12px;right:12px}
+.agent .astate .badge{height:22px;font-size:11px;padding:0 8px}
+.agent .astate .badge > span{display:inline-flex;align-items:center;gap:5px;transition:filter 200ms ease,opacity 200ms ease}
+.agent[data-state="queued"]{opacity:.7}
+.agent[data-state="run"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.agent[data-state="run"] .aicon{color:var(--accent);border-color:var(--accent-ring)}
+.agent[data-state="run"] .aicon::after{animation:pulse 1.4s var(--ease-out) infinite}
+.agent[data-state="fail"]{border-color:var(--crit-bd)}
+.agent[data-state="skip"]{opacity:.45}
+@keyframes pulse{0%{opacity:.6;transform:scale(.92)}100%{opacity:0;transform:scale(1.12)}}
+.swap-in{animation:swapblur 220ms var(--ease-out)}
+@keyframes swapblur{from{filter:blur(2px);opacity:.4;transform:scale(.96)}to{filter:none;opacity:1;transform:none}}
+.attempt{font-size:11px;font-weight:600;color:var(--med-fg);background:var(--med-bg);border:1px solid var(--med-bd);border-radius:999px;padding:1px 7px}
+.attempt[hidden]{display:none}
+
+.agent-body{display:grid;gap:16px}
+@media (min-width:900px){.agent-body{grid-template-columns:1.25fr 1fr}}
+.console{border-radius:12px;background:var(--console-bg);color:var(--console-fg);border:1px solid rgba(255,255,255,.06);overflow:hidden;display:flex;flex-direction:column;min-height:340px}
+.console-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07);font-size:12px;color:var(--console-muted)}
+.console-head .lights{display:flex;gap:6px;margin-right:6px}
+.console-head .lights i{width:10px;height:10px;border-radius:50%;background:#334155;display:block}
+.console-head .sim{margin-left:auto;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12)}
+.console ol{list-style:none;margin:0;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.65;overflow:auto;max-height:380px;flex:1}
+.console li{display:grid;grid-template-columns:52px 84px 1fr;gap:8px;animation:line 200ms var(--ease-out)}
+@keyframes line{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.console .ts{color:var(--console-muted)}
+.console .who{color:#94a3b8}
+.console .who::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:currentColor;opacity:.7}
+.console .ok{color:#86efac} .console .err{color:#fda4af} .console .warn{color:#fcd34d} .console .dim{color:#64748b}
+.console .cursor{display:inline-block;width:7px;height:14px;background:#94a3b8;vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (max-width:560px){.console li{grid-template-columns:72px 1fr}.console .ts{display:none}}
+.handoff{padding:20px;display:flex;flex-direction:column;gap:14px}
+.handoff h4{font-size:15px;font-weight:600;display:flex;gap:8px;align-items:center}
+.ev-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.ev-list li{display:grid;grid-template-columns:18px 1fr;gap:10px;font-size:13.5px;color:var(--fg-2)}
+.ev-list li .i{width:15px;height:15px;margin-top:3px;color:var(--good)}
+.ev-list li b{color:var(--fg);font-weight:600}
+.ev-list.bad li .i{color:var(--crit)}
+.placeholder{display:grid;place-items:center;text-align:center;min-height:220px;color:var(--muted);font-size:14px;gap:8px;border:1px dashed var(--border-strong);border-radius:12px;padding:24px}
+.guard{display:grid;gap:16px;margin-top:16px}
+@media (min-width:820px){.guard{grid-template-columns:1fr 1fr 1fr}}
+.guard .card h4{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.guard ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13.5px;color:var(--fg-2)}
+.guard li{display:grid;grid-template-columns:16px 1fr;gap:8px}
+.guard li .i{width:14px;height:14px;margin-top:4px}
+.guard .yes .i{color:var(--good)} .guard .no .i{color:var(--crit)} .guard .dotl .i{color:var(--accent)}
+
+/* ------------------------------------------------------------------ verify */
+.verify{display:grid;gap:16px}
+@media (min-width:900px){.verify{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}}
+.outcomes{display:grid;gap:8px;align-content:start}
+.ocard{position:relative;display:grid;grid-template-columns:20px 1fr;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--surface);cursor:pointer;transition:border-color 150ms ease,box-shadow 150ms ease,transform 160ms var(--ease-out)}
+.ocard:active{transform:scale(.99)}
+.ocard input{position:absolute;opacity:0;pointer-events:none}
+.ocard .radio{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border-strong);margin-top:2px;display:grid;place-items:center;transition:border-color 150ms ease}
+.ocard .radio::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);transform:scale(.4);opacity:0;transition:transform 200ms var(--ease-out),opacity 150ms ease}
+.ocard:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.ocard:has(input:checked) .radio{border-color:var(--accent)}
+.ocard:has(input:checked) .radio::after{transform:none;opacity:1}
+.ocard:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.ocard b{display:block;font-size:14px;font-weight:600}
+.ocard span.s{font-size:12.5px;color:var(--muted)}
+@media (hover:hover) and (pointer:fine){.ocard:hover{border-color:var(--border-strong)}}
+.vpanel{padding:24px}
+.vhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:20px}
+.vhead h3{font-size:16px;font-weight:600}
+.vhead .sub{font-size:13px;color:var(--muted);margin-top:2px}
+.vstatus{font-size:13px}
+.vstatus .badge{height:28px;font-size:13px;padding:0 12px}
+.tl{list-style:none;margin:0;padding:0;position:relative}
+.tl::before{content:"";position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:var(--border)}
+.tl li{position:relative;display:grid;grid-template-columns:24px 1fr;gap:12px;padding:6px 0;animation:swap 260ms var(--ease-out) both;animation-delay:calc(var(--i,0) * 50ms)}
+.tl .tdot{position:relative;z-index:1;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:1.5px solid var(--border-strong);color:var(--muted)}
+.tl .tdot .i{width:12px;height:12px;stroke-width:2.5}
+.tl li.good .tdot{border-color:var(--good);color:var(--good)}
+.tl li.bad .tdot{border-color:var(--crit);color:var(--crit)}
+.tl li.warn .tdot{border-color:var(--med);color:var(--med)}
+.tl li.info .tdot{border-color:var(--accent);color:var(--accent)}
+.tl .tt{font-size:14px;font-weight:550}
+.tl .td{font-size:12.5px;color:var(--muted)}
+.tl .tdate{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-left:6px;font-weight:400}
+.rulebox{margin-top:20px;padding:14px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-size:13.5px;color:var(--fg-2)}
+.rulebox .label{display:block;margin-bottom:6px}
+.rulebox code{font-size:12px}
+
+/* ------------------------------------------------------------------ data sources + abbreviations */
+.src .by{font-size:12.5px;color:var(--muted);margin-top:2px}
+.src .full{font-size:13px;font-weight:550;color:var(--fg-2)}
+.src .lbl2{font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px}
+.src .sfoot{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:12.5px;color:var(--muted)}
+.src .sfoot a{color:var(--accent);font-weight:550;text-decoration:none;white-space:nowrap}
+.pipe{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.pipe li{display:grid;gap:4px;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:13.5px;background:var(--surface)}
+.pipe .pn{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pipe b{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.pipe span.d{font-size:12.5px;color:var(--muted)}
+.gloss-wrap summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-weight:600;font-size:15px}
+.gloss-wrap summary::-webkit-details-marker{display:none}
+.gloss{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0 24px;margin:16px 0 0}
+.gloss div{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;min-width:0}
+.gloss dt{flex:0 0 72px;font-weight:650}
+.gloss dd{margin:0;color:var(--muted);min-width:0}
+abbr{text-decoration:none;cursor:help}
+abbr.ab1{text-decoration:underline dotted;text-decoration-color:var(--muted);text-underline-offset:3px;text-decoration-thickness:1px}
+.btn abbr.ab1,button abbr.ab1,h1 abbr.ab1,h2 abbr.ab1,.nav abbr.ab1,.sb-link abbr.ab1{text-decoration:none}
+.link{color:var(--accent);text-decoration:none;font-weight:550}
+@media (max-width:860px){.nav-right .btn-primary{display:none}}
+/* ------------------------------------------------------------------ principles / personas / footer */
+.grid-4{display:grid;gap:16px}
+@media (min-width:700px){.grid-4{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:1000px){.grid-4{grid-template-columns:repeat(4,1fr)}}
+.personas{display:grid;gap:12px;margin-top:40px}
+@media (min-width:700px){.personas{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:1000px){.personas{grid-template-columns:repeat(3,1fr)}}
+.persona{display:grid;grid-template-columns:36px 1fr;gap:12px;padding:16px}
+.persona .pav{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--surface-3);color:var(--fg-2)}
+.persona b{font-size:14px;font-weight:600;display:block;color:var(--fg)}
+.persona .pd{font-size:13.5px;color:var(--muted)}
+footer{padding:56px 0 72px;border-top:1px solid var(--border)}
+.formula{margin-top:16px}
+.formula summary{cursor:pointer;font-size:14px;font-weight:550;color:var(--fg-2);list-style:none;display:inline-flex;gap:8px;align-items:center}
+.formula summary::-webkit-details-marker{display:none}
+.formula pre{margin:12px 0 0;padding:16px;border-radius:12px;background:var(--surface);border:1px solid var(--border);font-family:var(--mono);font-size:12.5px;line-height:1.7;overflow-x:auto;color:var(--fg-2)}
+.foot-row .brand{color:var(--fg)}
+.foot-row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;align-items:center;font-size:13px;color:var(--muted)}
+
+/* tooltip */
+.tip{position:fixed;z-index:100;max-width:260px;padding:8px 10px;border-radius:8px;background:var(--fg);color:var(--bg);font-size:12.5px;line-height:1.45;pointer-events:none;opacity:0;transform:translate(-50%,calc(-100% - 10px)) scale(.97);transform-origin:50% 100%;transition:opacity 125ms var(--ease-out),transform 125ms var(--ease-out)}
+.tip.show{opacity:1;transform:translate(-50%,calc(-100% - 10px)) scale(1)}
+.tip.instant{transition-duration:0ms}
+.tip b{font-weight:600}
+
+/* comparison by tool category */
+.cmpx-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface);-webkit-overflow-scrolling:touch}
+.cmpx{width:100%;min-width:760px;border-collapse:separate;border-spacing:0;font-size:13px}
+.cmpx th,.cmpx td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+.cmpx tbody tr:last-child th,.cmpx tbody tr:last-child td{border-bottom:0}
+.cmpx thead th{font-size:12px;font-weight:650;color:var(--muted);background:var(--surface-2);line-height:1.35}
+.cmpx tbody th{font-weight:600;width:20%;position:sticky;left:0;background:var(--surface);z-index:1}
+.cmpx thead th:first-child{position:sticky;left:0;z-index:2}
+.cmpx th{text-transform:none;letter-spacing:normal}
+.cmpx tbody th{font-size:13px;color:var(--fg)}
+.cmpx .us{background:var(--accent-soft)}
+.cmpx thead th.us{color:var(--accent);background:var(--accent-soft)}
+.cmpx small{display:block;margin-top:4px;font-size:12px;color:var(--muted);line-height:1.4}
+.cmpx small.plain{margin:0;color:var(--fg-2)}
+.cm{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:650}
+.cm::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
+.cm-y{color:var(--good-fg)}.cm-y::before{background:var(--good)}
+.cm-p{color:var(--med-fg)}.cm-p::before{background:var(--med)}
+.cm-n{color:var(--muted)}.cm-n::before{background:transparent;border:1.5px solid var(--faint)}
+.cm-v{color:var(--muted)}.cm-v::before{background:var(--border-strong)}
+.cmpx-note{margin-top:12px;font-size:13px;color:var(--muted);max-width:820px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* roadmap badges: hidden unless the viewer turns them on */
+[data-embedded] #themeBtn{display:none}
+:root .rm-badge{display:none;align-items:center;margin-left:8px;padding:1px 7px;border-radius:999px;border:1px dashed var(--accent);color:var(--accent);background:var(--accent-soft);font-size:10.5px;font-weight:650;letter-spacing:.02em;line-height:1.5;white-space:nowrap;text-transform:none;vertical-align:1px}
+:root[data-roadmap="on"] .rm-badge{display:inline-flex}
+.cmp-head{margin:56px 0 20px}
+.cmp-head h3{font-size:20px;font-weight:650;letter-spacing:-.01em}
+.cmp-head p{margin-top:6px;color:var(--muted);max-width:720px}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:1ms !important;animation-iteration-count:1 !important;transition-property:opacity,color,background-color,border-color,box-shadow !important}
+  .js .reveal{transform:none}
+  .agent[data-state="run"] .aicon::after{animation:none}
+}
+@media (forced-colors:active){.sbar .seg-fill{forced-color-adjust:none}}
+</style>
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to content</a>
+
+<!-- ============================================================ NAV -->
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Everlit home">
+      <span class="brand-mark"><i data-i="shield"></i></span> Everlit
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#lifecycle">Lifecycle</a>
+      <a href="#playground">Score</a>
+      <a href="#compare">vs CVSS</a>
+      <a href="#agents">Agents</a>
+      <a href="#verify">Verify</a>
+      <a href="#proof">Proof</a>
+      <a href="#ai">AI</a>
+      <a href="#portfolio">Portfolio</a>
+      <a href="#sources">Sources</a>
+      <a href="#principles">Principles</a>
+    </nav>
+    <div class="nav-right">
+      <a class="btn btn-primary btn-sm" href="product.html">Open the product <i data-i="arrowRight"></i></a>
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Theme: system"><i data-i="monitor"></i></button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<!-- ============================================================ HERO -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <a class="pill-link reveal" href="#lifecycle"><span class="tag">Walkthrough</span> Follow one finding from scan to verified fix <i data-i="arrowRight"></i></a>
+      <h1 class="reveal" style="--i:1">CVSS says how bad a bug <span class="soft">could&nbsp;be.</span> Everlit says what to <span class="accent">fix&nbsp;first</span>, then gets it&nbsp;fixed.</h1>
+      <p class="hero-sub reveal" style="--i:2">Our self-hosted platform for vulnerabilities in the open-source packages our code depends on. It scores every finding with <em>our</em> context (real-world exploitation, whether our code imports the package, internet exposure, business criticality) and turns that score into policy, merge gates, SLAs and fix PRs.</p>
+      <div class="hero-cta reveal" style="--i:3">
+        <a class="btn btn-primary" href="#playground"><i data-i="gauge"></i> Try the score playground</a>
+        <a class="btn btn-secondary" href="product.html">Open the product <i data-i="arrowRight"></i></a>
+        <a class="btn btn-ghost" href="#lifecycle">Walk the lifecycle</a>
+      </div>
+      <div class="hero-meta reveal" style="--i:4">
+        <span><i data-i="check"></i> 8 ecosystems via OSV.dev</span>
+        <span><i data-i="check"></i> EPSS + CISA KEV enrichment</span>
+        <span><i data-i="check"></i> Pre-merge PR gate with AI review<span class="rm-badge" title="Planned for Phase 3 of the rollout">Phase 3</span></span>
+        <span><i data-i="check"></i> CI-gated fix PRs</span>
+        <span><i data-i="check"></i> SDLC agents for complex fixes<span class="rm-badge" title="Planned for Phase 3 of the rollout">Phase 3</span></span>
+      </div>
+    </div>
+
+    <div class="card finding reveal" style="--i:2" aria-label="Example finding">
+      <div class="finding-top">
+        <div>
+          <h3>lodash 4.17.15 · command injection</h3>
+          <div class="sub mono">CVE-2021-23337 · payments-api · direct-runtime</div>
+        </div>
+        <span id="heroBadge"></span>
+      </div>
+      <div class="versus">
+        <div>
+          <div class="label">CVSS alone</div>
+          <div class="v-num tnum">7.2 <small>/ 10</small></div>
+          <span id="heroCvssBadge"></span>
+        </div>
+        <div class="win">
+          <div class="label">Everlit priority</div>
+          <div class="v-num" id="heroScore">—</div>
+          <span class="muted small">with our context</span>
+        </div>
+      </div>
+      <div class="sbar" id="heroBar" aria-hidden="true"></div>
+      <div class="why" id="heroWhy"></div>
+      <div class="finding-foot" id="heroFoot"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PROBLEM -->
+<section class="band" id="problem">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">01</span> The problem</div>
+      <h2 class="title reveal" style="--i:1">Scanners find thousands of issues. Teams fix the wrong ones first.</h2>
+      <p class="lede reveal" style="--i:2">Everlit isn't another dependency updater or scanner. We keep the scanners we have; Everlit adds what they leave out: business context, policy, enforcement at the pull request, and fixes that are proven in CI.</p>
+    </div>
+    <div class="grid-3">
+      <article class="card card-pad feature reveal" style="--i:0">
+        <div class="ficon"><i data-i="alert" class="i-lg"></i></div>
+        <h3>Update bots don't know what's exploitable</h3>
+        <p>Dependency-update bots keep packages current by opening an upgrade PR for every outdated package. None of them says which upgrade closes a vulnerability attackers are using today, or which service it matters for.</p>
+        <div class="answer"><i data-i="check"></i><span>EPSS likelihood and the CISA KEV list feed every score.</span></div>
+      </article>
+      <article class="card card-pad feature reveal" style="--i:1">
+        <div class="ficon"><i data-i="layers" class="i-lg"></i></div>
+        <h3>Generic severity ignores our context</h3>
+        <p>A CVSS 9.8 in a test helper and the same bug in an internet-facing payments API get the same label.</p>
+        <div class="answer"><i data-i="check"></i><span>Import evidence, exposure and criticality reshape priority.</span></div>
+      </article>
+      <article class="card card-pad feature reveal" style="--i:2">
+        <div class="ficon"><i data-i="gitMerge" class="i-lg"></i></div>
+        <h3>Post-merge scanning is too late</h3>
+        <p>By the time a nightly scan flags it, vulnerable code is already on main and heading to production.</p>
+        <div class="answer"><i data-i="check"></i><span>A pre-merge gate blocks only what the PR introduces, and an AI review flags risky code before it reaches main.</span></div>
+      </article>
+    </div>
+    <div class="cmp-head reveal" id="compare-tools">
+      <h3>How Everlit compares</h3>
+      <p>Everlit sits on top of the scanners, not in place of them. Update bots keep packages current, scanners find issues, and commercial risk platforms pull findings into one view; Everlit adds our context, the pull request gate and fixes proven by a rescan. It is slower to start and our own team supports it. <a class="link" href="executive.html#build">See the full build-versus-buy comparison →</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ LIFECYCLE -->
+<section id="lifecycle">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">02</span> End-to-end lifecycle</div>
+      <h2 class="title reveal" style="--i:1">From who's allowed to see it, to proof that it's fixed.</h2>
+      <p class="lede reveal" style="--i:2">Follow one finding (lodash in <code>payments-api</code>) through ten stages. Switch roles to see exactly what each person, or the SDLC agent, is entitled to do at every step.</p>
+    </div>
+
+    <div class="roles reveal" role="radiogroup" aria-label="Viewing as" id="roleChips">
+      <span class="label">Viewing as</span>
+    </div>
+
+    <div class="rail reveal" role="tablist" aria-label="Lifecycle stages" id="rail">
+      <div class="rail-line" aria-hidden="true"><div class="rail-fill" id="railFill"></div></div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="card stage-main" id="stageMain" role="tabpanel"></div>
+      <div class="card perm" id="stagePerm"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PLAYGROUND -->
+<section class="band" id="playground">
+  <div class="wrap">
+    <div class="head head-row">
+      <div>
+        <div class="eyebrow reveal"><span class="num">03</span> Score playground</div>
+        <h2 class="title reveal" style="--i:1">One documented number drives everything.</h2>
+        <p class="lede reveal" style="--i:2">Move the inputs and watch the 0–100 priority, the policy action, the merge gate and the SLA react. This is the exact formula the platform runs.</p>
+      </div>
+    </div>
+
+    <div class="presets reveal" id="presets" aria-label="Presets"></div>
+
+    <div class="play">
+      <form class="card controls reveal" id="controls" onsubmit="return false" aria-label="Scoring inputs">
+        <div>
+          <div class="ctrl-head"><label for="in-cvss">CVSS base score</label><output id="out-cvss" for="in-cvss">7.2</output></div>
+          <input class="range" type="range" id="in-cvss" min="0" max="10" step="0.1" value="7.2">
+          <div class="ctrl-hint">How bad the bug could be in theory · worth up to 35 points</div>
+        </div>
+        <div>
+          <div class="ctrl-head"><label for="in-epss">Exploit likelihood (EPSS probability)</label><output id="out-epss" for="in-epss">1.2%</output></div>
+          <input class="range" type="range" id="in-epss" min="0" max="100" step="1" value="52" aria-describedby="epssHint">
+          <div class="ctrl-hint" id="epssHint">Chance of exploitation in the next 30 days · 10% or more: 25 · 1–10%: 15 · 0.1–1%: 5 · under 0.1%: 0 points</div>
+        </div>
+        <div>
+          <div class="ctrl-row">
+            <label class="switch"><input type="checkbox" id="in-kev"><span class="track"></span><span class="sw-text">Known exploited (CISA KEV)</span></label>
+          </div>
+          <div class="ctrl-hint">Exploited in the wild: full 25 exploit points, +10 bonus, and the 7-day KEV SLA</div>
+        </div>
+        <div>
+          <div class="ctrl-head"><span class="ctrl-name" id="lbl-reach">Import evidence</span></div>
+          <div class="seg" style="--n:3" data-seg="reach" role="radiogroup" aria-labelledby="lbl-reach">
+            <span class="seg-pill"></span>
+            <label><input type="radio" name="reach" value="yes" checked><span>Imported</span></label>
+            <label><input type="radio" name="reach" value="unknown"><span>Unknown</span></label>
+            <label><input type="radio" name="reach" value="no"><span>Not imported</span></label>
+          </div>
+          <div class="ctrl-hint">Does our code import the vulnerable package? 15 / 7.5 / 0 points</div>
+        </div>
+        <div>
+          <div class="ctrl-row">
+            <label class="switch"><input type="checkbox" id="in-net" checked><span class="track"></span><span class="sw-text">Internet-facing service</span></label>
+          </div>
+          <div class="ctrl-hint">15 points if exposed, 3 if internal</div>
+        </div>
+        <div>
+          <div class="ctrl-head"><span class="ctrl-name" id="lbl-tier">Business criticality</span></div>
+          <div class="seg" style="--n:4" data-seg="tier" role="radiogroup" aria-labelledby="lbl-tier">
+            <span class="seg-pill"></span>
+            <label><input type="radio" name="tier" value="critical" checked><span>Critical</span></label>
+            <label><input type="radio" name="tier" value="high"><span>High</span></label>
+            <label><input type="radio" name="tier" value="medium"><span>Medium</span></label>
+            <label><input type="radio" name="tier" value="low"><span>Low</span></label>
+          </div>
+          <div class="ctrl-hint">Set per repo by security · 10 / 7 / 4 / 0 points</div>
+        </div>
+        <div>
+          <div class="ctrl-head"><span class="ctrl-name" id="lbl-scope">Dependency scope</span></div>
+          <div class="seg" style="--n:2" data-seg="scope" role="radiogroup" aria-labelledby="lbl-scope">
+            <span class="seg-pill"></span>
+            <label><input type="radio" name="scope" value="runtime" checked><span>Runtime</span></label>
+            <label><input type="radio" name="scope" value="dev"><span>Dev / test only</span></label>
+          </div>
+          <div class="ctrl-hint">Dev-only dependencies don't ship, so the total is scaled ×0.6</div>
+        </div>
+      </form>
+
+      <div class="card result reveal" style="--i:1">
+        <div class="score-row">
+          <div>
+            <div class="label">Everlit priority</div>
+            <div class="hero-fig" id="scoreNum">84<small>/100</small></div>
+          </div>
+          <div class="score-meta">
+            <span id="scoreBadge"></span>
+            <div class="vs-cvss" id="vsCvss"></div>
+          </div>
+        </div>
+        <div aria-live="polite" class="sr-only" id="scoreLive"></div>
+
+        <div>
+          <div class="ticks" aria-hidden="true">
+            <span class="tick" style="left:35%">Medium ≥35</span>
+            <span class="tick" style="left:60%">High ≥60</span>
+            <span class="tick" style="left:80%">Critical ≥80</span>
+          </div>
+          <div class="sbar sbar-lg" id="playBar" role="img" aria-label="Score breakdown"></div>
+          <div class="axis" aria-hidden="true"><span>0</span><span>100</span></div>
+        </div>
+
+        <div class="devnote" id="devNote" hidden><span class="sw"></span><span id="devText"></span></div>
+
+        <div class="legend" id="legend"></div>
+
+        <div>
+          <button class="linkish" type="button" id="tableToggle" aria-expanded="false"><i data-i="list"></i> View as table</button>
+          <div id="tableWrap" hidden style="margin-top:12px;overflow-x:auto"></div>
+        </div>
+        <p class="small muted" style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">Thresholds match the default policy rules. A finding's bucket picks its action, gate and SLA. Hover a segment to see its rule.</p>
+      </div>
+    </div>
+
+    <div class="outcome" id="outcome"></div>
+
+    <details class="policy-edit" id="policyEdit">
+      <summary><i data-i="sliders"></i> Edit policy rules &amp; SLAs <i data-i="chevDown" class="chev"></i></summary>
+      <div class="policy-grid">
+        <div class="card card-pad" style="overflow-x:auto">
+          <div class="label" style="margin-bottom:8px">Policy rules · first match wins</div>
+          <table class="tbl" id="rulesTbl"></table>
+        </div>
+        <div class="card card-pad" style="overflow-x:auto">
+          <div class="label" style="margin-bottom:8px">Remediation SLA (days)</div>
+          <table class="tbl" id="slaTbl"></table>
+          <button class="btn btn-ghost btn-sm" type="button" id="resetPolicy" style="margin-top:12px"><i data-i="undo"></i> Reset to defaults</button>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ============================================================ COMPARE -->
+<section id="compare">
+  <div class="wrap">
+    <div class="head head-row">
+      <div>
+        <div class="eyebrow reveal"><span class="num">04</span> CVSS vs Everlit</div>
+        <h2 class="title reveal" style="--i:1">Same eight findings. Very different Monday morning.</h2>
+        <p class="lede reveal" style="--i:2">Rank by CVSS and the team burns a sprint on bugs nobody can reach. Rank by Everlit and the actively exploited, internet-facing ones rise to the top. These are illustrative scenarios.</p>
+      </div>
+      <div class="cmp-toolbar reveal" style="--i:3">
+        <div class="seg" style="--n:2" data-seg="rank" role="radiogroup" aria-label="Rank by">
+          <span class="seg-pill"></span>
+          <label><input type="radio" name="rank" value="cvss" checked><span>Rank by CVSS</span></label>
+          <label><input type="radio" name="rank" value="everlit"><span>Rank by Everlit</span></label>
+        </div>
+      </div>
+    </div>
+    <ol class="cmp" id="cmpList" aria-live="polite"></ol>
+    <div class="cmp-legend">
+      <span><i data-i="arrowUp" style="color:var(--crit-fg)"></i> moved up vs CVSS order</span>
+      <span><i data-i="arrowDown" style="color:var(--good-fg)"></i> moved down</span>
+      <span><i data-i="lock"></i> blocks merge under default policy</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ AGENTS -->
+<section class="band" id="agents">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">05</span> SDLC agent squad<span class="rm-badge" title="Planned for Phase 3 of the rollout">Phase 3</span></div>
+      <h2 class="title reveal" style="--i:1">When the fix isn't a one-line bump, agents do the legwork. The owning team makes the call.</h2>
+      <p class="lede reveal" style="--i:2">When a fix needs more than a version bump, Everlit routes it to a squad of agents. They plan the change, write it, test it, re-scan it, and hand the owning team a PR with an evidence pack. Agents never approve or merge their own work.</p>
+    </div>
+
+    <div class="agent-top">
+      <div>
+        <div class="label" style="margin-bottom:8px">Pick a complex fix</div>
+        <div class="scen" id="scenChips" role="radiogroup" aria-label="Complex-fix scenario"></div>
+      </div>
+      <div class="ctrl-bar">
+        <label class="switch"><input type="checkbox" id="failToggle"><span class="track"></span><span class="sw-text small">Make it fail</span></label>
+        <button class="btn btn-secondary btn-sm" type="button" id="playBtn"><i data-i="pause"></i> Pause</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="replayBtn"><i data-i="undo"></i> Replay</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="skipBtn"><i data-i="skip"></i> Skip to end</button>
+      </div>
+    </div>
+
+    <div class="why-human" id="whyHuman"></div>
+
+    <div class="squad" id="squad">
+      <div class="retry-arc" id="retryArc" aria-hidden="true">
+        <div class="wrap-clip"><svg viewBox="0 0 100 34" preserveAspectRatio="none"><path d="M98 34 C 98 6, 2 6, 2 34" vector-effect="non-scaling-stroke"/></svg></div>
+        <span class="rlabel" id="retryLabel">tests failed: retry</span>
+      </div>
+    </div>
+
+    <div class="agent-body">
+      <div class="console" aria-label="Agent run log">
+        <div class="console-head"><span class="lights"><i></i><i></i><i></i></span><span id="consoleTitle">everlit-agents · run</span></div>
+        <ol id="consoleLog" aria-live="polite"></ol>
+      </div>
+      <div class="card" id="handoff"></div>
+    </div>
+
+    <div class="guard">
+      <div class="card card-pad">
+        <h4><i data-i="check" style="color:var(--good)"></i> The agent identity can</h4>
+        <ul>
+          <li class="yes"><i data-i="check"></i>Run scans and read findings for repos it's assigned</li>
+          <li class="yes"><i data-i="check"></i>Push a fix branch and open a PR</li>
+          <li class="yes"><i data-i="check"></i>Comment, attach evidence, request review from the owning team</li>
+        </ul>
+      </div>
+      <div class="card card-pad">
+        <h4><i data-i="ban" style="color:var(--crit)"></i> It can never</h4>
+        <ul>
+          <li class="no"><i data-i="x"></i>Approve or merge its own PR</li>
+          <li class="no"><i data-i="x"></i>Approve exceptions or accept risk</li>
+          <li class="no"><i data-i="x"></i>Edit policy, repo exposure or criticality</li>
+          <li class="no"><i data-i="x"></i>Mark a finding fixed. Only a rescan can</li>
+        </ul>
+      </div>
+      <div class="card card-pad">
+        <h4><i data-i="shield" style="color:var(--accent)"></i> Guardrails</h4>
+        <ul>
+          <li class="dotl"><i data-i="dot"></i>Runs in a sandbox; at most 3 fix ↔ test attempts, then escalates</li>
+          <li class="dotl"><i data-i="dot"></i>Every step lands in the audit log</li>
+          <li class="dotl"><i data-i="dot"></i>Never reports a success that didn't happen</li>
+          <li class="dotl"><i data-i="dot"></i>Runs on our approved model deployment; code never leaves our network</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ VERIFY -->
+<section id="verify">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">06</span> The final check</div>
+      <h2 class="title reveal" style="--i:1">"Did the fix actually work?" Only a rescan gets to say yes.</h2>
+      <p class="lede reveal" style="--i:2">After the merge, Everlit reconciles the next scan against what it knew. Pick what the rescan sees; these are the platform's real auto-close rules.</p>
+    </div>
+    <div class="verify">
+      <div class="outcomes" id="outcomes" role="radiogroup" aria-label="Rescan outcome"></div>
+      <div class="card vpanel" id="vpanel" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PROOF -->
+<section class="band" id="proof">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">07</span> Proof you can check</div>
+      <h2 class="title reveal" style="--i:1">Every claim comes with its receipt.</h2>
+      <p class="lede reveal" style="--i:2">A dashboard that says "0 findings" is only as good as what it looked at. Everlit records what each scan checked, where each score input came from, which policy decided, and who signed off, in a log nobody can quietly edit.</p>
+    </div>
+    <div class="grid-3">
+      <article class="card card-pad feature reveal" style="--i:0"><div class="ficon"><i data-i="clipboard" class="i-lg"></i></div><h3>Coverage receipt on every scan</h3><p>Manifests and dependencies checked, whether OSV.dev answered for every package, EPSS and KEV freshness, and the policy version. A finding only auto-closes when coverage is complete.</p></article>
+      <article class="card card-pad feature reveal" style="--i:1"><div class="ficon"><i data-i="sliders" class="i-lg"></i></div><h3>Every score input labelled</h3><p>Each term of the priority score is marked Verified, Inferred, Declared or Default, with a confidence line and the exact arithmetic. A guessed number never looks like a measured one.</p></article>
+      <article class="card card-pad feature reveal" style="--i:2"><div class="ficon"><i data-i="scroll" class="i-lg"></i></div><h3>Policy versions</h3><p>The rules, merge-blocking settings and deadlines are hashed into a version. Scans, gate verdicts and decisions record it, and any version expands back to its exact rules.</p></article>
+      <article class="card card-pad feature reveal" style="--i:3"><div class="ficon"><i data-i="lock" class="i-lg"></i></div><h3>Tamper-evident audit log</h3><p>Each event stores a SHA-256 hash of the event before it. One click verifies the chain; an edited or deleted entry is named exactly. Exports carry the hashes.</p></article>
+      <article class="card card-pad feature reveal" style="--i:4"><div class="ficon"><i data-i="gitMerge" class="i-lg"></i></div><h3>Verified, not just merged</h3><p>Branch, CI, PR, merge, then the rescan that proves it: each step is timestamped. Closed PRs, cancelled fixes and repos that never report CI are shown as what they are.</p></article>
+      <article class="card card-pad feature reveal" style="--i:5"><div class="ficon"><i data-i="users" class="i-lg"></i></div><h3>Accountable sign-off</h3><p>Exceptions, gate overrides and not-affected statements all need a second person. Sessions end after 8 hours or 30 minutes idle, per device, and gate evidence is kept 400 days.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ AI -->
+<section id="ai">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">08</span> AI with guardrails</div>
+      <h2 class="title reveal" style="--i:1">AI investigates and explains. The rules decide.</h2>
+      <p class="lede reveal" style="--i:2">Every AI feature reads a defined slice of evidence, cites what it used and writes a record of the run. None of them can change a status, a score, a verdict or a deadline.</p>
+    </div>
+    <div class="grid-4">
+      <article class="card card-pad feature reveal" style="--i:0"><div class="ficon"><i data-i="search" class="i-lg"></i></div><h3>Investigate a finding</h3><p>Facts with their source, the unknowns said out loud, a recommended next step and a confidence level.</p></article>
+      <article class="card card-pad feature reveal" style="--i:1"><div class="ficon"><i data-i="info" class="i-lg"></i></div><h3>Explain a verdict</h3><p>Why a PR was blocked, in the score's own terms and the rule that matched, with the options to move forward.</p></article>
+      <article class="card card-pad feature reveal" style="--i:2"><div class="ficon"><i data-i="file" class="i-lg"></i></div><h3>Release notes and CI triage</h3><p>What a version bump changes, and whether a failed CI run was caused by the bump.</p></article>
+      <article class="card card-pad feature reveal" style="--i:3"><div class="ficon"><i data-i="sliders" class="i-lg"></i></div><h3>Rules in plain language</h3><p>Describe a rule; the AI drafts it in the engine's own fields and a simulation shows its effect before a person saves it.</p></article>
+    </div>
+    <div class="guard" style="margin-top:16px">
+      <div class="card card-pad">
+        <h4><i data-i="check" style="color:var(--good)"></i> AI can</h4>
+        <ul>
+          <li class="yes"><i data-i="check"></i>Read the finding, the PR diff or the history it was asked about</li>
+          <li class="yes"><i data-i="check"></i>Draft explanations, summaries, rules and exception text</li>
+          <li class="yes"><i data-i="check"></i>Flag weak or repeated exceptions for a person to review</li>
+        </ul>
+      </div>
+      <div class="card card-pad">
+        <h4><i data-i="ban" style="color:var(--crit)"></i> AI can never</h4>
+        <ul>
+          <li class="no"><i data-i="x"></i>Change a status, score, verdict or deadline</li>
+          <li class="no"><i data-i="x"></i>Approve exceptions, overrides or VEX statements</li>
+          <li class="no"><i data-i="x"></i>Follow instructions found in code, advisories or tickets</li>
+        </ul>
+      </div>
+      <div class="card card-pad">
+        <h4><i data-i="shield" style="color:var(--accent)"></i> Every run</h4>
+        <ul>
+          <li class="dotl"><i data-i="dot"></i>Is logged with model deployment, prompt version and the evidence it read</li>
+          <li class="dotl"><i data-i="dot"></i>Treats repository and advisory text as data, never as instructions</li>
+          <li class="dotl"><i data-i="dot"></i>Stays inside our approved model deployment and one tenant's data</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PORTFOLIO -->
+<section class="band" id="portfolio">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">09</span> Across the portfolio</div>
+      <h2 class="title reveal" style="--i:1">From one finding to the whole estate.</h2>
+      <p class="lede reveal" style="--i:2">The same evidence that ranks one finding also shows where else the package lives, which single upgrade removes the most risk, and what a release shipped with.</p>
+    </div>
+    <div class="grid-4">
+      <article class="card card-pad feature reveal" style="--i:0"><div class="ficon"><i data-i="globe" class="i-lg"></i></div><h3>Blast radius</h3><p>Every repo where a vulnerable package lives, with its exposure, criticality and owning team.</p></article>
+      <article class="card card-pad feature reveal" style="--i:1"><div class="ficon"><i data-i="layers" class="i-lg"></i></div><h3>Remediation plan</h3><p>Shared upgrades ranked by the risk they remove across repos, with the patch, minor or major change each needs.</p></article>
+      <article class="card card-pad feature reveal" style="--i:2"><div class="ficon"><i data-i="refresh" class="i-lg"></i></div><h3>Root causes</h3><p>Packages vulnerable in several repos, exceptions renewed again and again, and fixes that need engineering time.</p></article>
+      <article class="card card-pad feature reveal" style="--i:3"><div class="ficon"><i data-i="clipboard" class="i-lg"></i></div><h3>Release passport</h3><p>One file per release: inventory, coverage, verdicts, exceptions with owners, verified fixes and the policy version.</p></article>
+      <article class="card card-pad feature reveal" style="--i:4"><div class="ficon"><i data-i="server" class="i-lg"></i></div><h3>SBOMs from CI</h3><p>CI posts the CycloneDX or SPDX SBOM of each build, so the scan matches exactly what shipped.</p></article>
+      <article class="card card-pad feature reveal" style="--i:5"><div class="ficon"><i data-i="file" class="i-lg"></i></div><h3>VEX with evidence</h3><p>Not-affected statements need evidence and a second approver, and flow into every VEX export.</p></article>
+      <article class="card card-pad feature reveal" style="--i:6"><div class="ficon"><i data-i="alert" class="i-lg"></i></div><h3>KEV re-scoring</h3><p>When CISA lists a CVE, matching findings are re-scored and their deadlines tightened at the next daily sync, with no rescan.</p></article>
+      <article class="card card-pad feature reveal" style="--i:7"><div class="ficon"><i data-i="plug" class="i-lg"></i></div><h3>Where teams work</h3><p>GitHub check runs with annotations, Slack alerts to the owning team, and Jira or ServiceNow records for work that needs a plan.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ DATA SOURCES -->
+<section id="sources">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">10</span> Data sources</div>
+      <h2 class="title reveal" style="--i:1">Every finding is built on sources the industry already trusts.</h2>
+      <p class="lede reveal" style="--i:2">Vulnerability records come from public, industry-standard sources run by government agencies, standards bodies and major open-source security teams. No score rests on a single vendor's opinion.</p>
+    </div>
+    <div class="grid-3" id="srcGrid"></div>
+    <div class="card card-pad reveal" style="margin-top:16px">
+      <div class="label" style="margin-bottom:12px">How a finding is built</div>
+      <ol class="pipe" id="pipe"></ol>
+    </div>
+    <details class="card card-pad gloss-wrap" style="margin-top:16px">
+      <summary><i data-i="list"></i> Glossary: every abbreviation and its full form <span class="muted small">(or hover any abbreviation on this page)</span></summary>
+      <dl class="gloss" id="gloss" data-noabbr></dl>
+    </details>
+  </div>
+</section>
+
+<!-- ============================================================ PRINCIPLES -->
+<section class="band" id="principles">
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow reveal"><span class="num">11</span> Principles &amp; people</div>
+      <h2 class="title reveal" style="--i:1">Built to be trusted by the people who have to sign off.</h2>
+    </div>
+    <div class="grid-4">
+      <article class="card card-pad feature reveal" style="--i:0"><div class="ficon"><i data-i="eye" class="i-lg"></i></div><h3>Never reports what didn't happen</h3><p>Degraded scans don't close findings, an incomplete gate is never a green pass, and a PR or ticket is only reported once it really exists.</p></article>
+      <article class="card card-pad feature reveal" style="--i:1"><div class="ficon"><i data-i="users" class="i-lg"></i></div><h3>Two people, always expiring</h3><p>Every exception needs a second reviewer and has a hard expiry: 90 or 365 days.</p></article>
+      <article class="card card-pad feature reveal" style="--i:2"><div class="ficon"><i data-i="plug" class="i-lg"></i></div><h3>Bring your own scanner</h3><p>One finding format behind adapters. New tools plug in without touching the pipeline.</p></article>
+      <article class="card card-pad feature reveal" style="--i:3"><div class="ficon"><i data-i="file" class="i-lg"></i></div><h3>Audit-ready by default</h3><p>A unified audit log, compliance views and CycloneDX VEX export.</p></article>
+    </div>
+    <div class="personas" id="personas"></div>
+  </div>
+</section>
+</main>
+
+<!-- ============================================================ FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="foot-row">
+      <span class="brand"><span class="brand-mark"><i data-i="shield"></i></span> Everlit · product overview</span>
+      <span>Runs entirely offline. <a class="link" href="product.html">Open the product →</a> · <a class="link" href="executive.html">Executive brief →</a></span>
+    </div>
+    <details class="formula">
+      <summary><i data-i="code"></i> Show the exact scoring formula</summary>
+<pre>cvss      = (cvssScore ?? 5) / 10 × 35
+exploit   = kev ? 25 : epss ≥ 10% ? 25 : epss ≥ 1% ? 15 : epss ≥ 0.1% ? 5 : epss known ? 0 : 5
+reach     = unknown ? 7.5 : imported ? 15 : 0
+exposure  = internetFacing ? 15 : 3
+tier      = { critical: 10, high: 7, medium: 4, low: 0 }
+kevBonus  = kev ? 10 : 0
+priority  = round(clamp(0, 100, (cvss + exploit + reach + exposure + tier + kevBonus) × (devScope ? 0.6 : 1)))
+bucket    = ≥80 critical · ≥60 high · ≥35 medium · else low
+SLA days  = { kev: 7, critical: 7, high: 30, medium: 90, low: 180 }, KEV takes the tighter</pre>
+    </details>
+  </div>
+</footer>
+
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+/*
+ * Logic mirrored from vuln-mgmt-platform. Keep in sync with:
+ *   src/lib/scoring.ts      computePriorityScore, weights, defaults
+ *   src/lib/types.ts        severityFromScore, EXCEPTION_MAX_DAYS
+ *   src/lib/policy.ts       decidePolicy (+ default rules in prisma/seed.ts)
+ *   src/lib/sla.ts          DEFAULT_SLA_DAYS, slaDaysFor
+ *   src/lib/access.ts       PAGE_ROLES, ACTION_ROLES, roleCan, isTeamScoped
+ *   src/lib/remediation.ts  manual(...) reasons, CI-gated PRs
+ *   src/lib/reconcile.ts    the four auto-close / reopen rules
+ */
+(() => {
+"use strict";
+document.documentElement.classList.add("js");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+/* ---------------------------------------------------------------- icons (lucide-style outlines) */
+const ICONS = {
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  lock:'<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  unlock:'<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  flame:'<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  arrowUp:'<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  arrowDown:'<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  arrowRight:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  minus:'<path d="M5 12h14"/>',
+  pr:'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/>',
+  branch:'<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  gitMerge:'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  key:'<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  layers:'<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  gauge:'<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  plug:'<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+  circleCheck:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  bot:'<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  monitor:'<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  globe:'<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:'<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  undo:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  skip:'<polygon points="5 4 15 12 5 20 5 4"/><path d="M19 5v14"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+  list:'<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+  ban:'<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  flask:'<path d="M10 2v7.53a2 2 0 0 1-.21.9L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.07-10.12a2 2 0 0 1-.21-.9V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
+  sliders:'<path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/>',
+  chevDown:'<path d="m6 9 6 6 6-6"/>',
+  sparkle:'<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.36 11a.5.5 0 0 1 0-.96L8.5 8.45A2 2 0 0 0 9.94 7l1.58-6.13a.5.5 0 0 1 .96 0L14.06 7a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .97L15.5 12.6a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
+  dot:'<circle cx="12" cy="12" r="3" fill="currentColor"/>',
+  eye:'<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
+  code:'<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  scroll:'<path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/>',
+  building:'<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>',
+  clipboard:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  server:'<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
+};
+const ic = (name, cls = "") => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+function hydrateIcons(root = document) {
+  $$("i[data-i]", root).forEach(el => {
+    const tmp = document.createElement("span");
+    tmp.innerHTML = ic(el.dataset.i, el.className);
+    const svg = tmp.firstChild;
+    if (el.getAttribute("style")) svg.setAttribute("style", el.getAttribute("style"));
+    el.replaceWith(svg);
+  });
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+/* ---------------------------------------------------------------- scoring (src/lib/scoring.ts) */
+const SCORE_WEIGHTS = { cvss: 35, exploit: 25, reachability: 15, exposure: 15, criticality: 10 };
+const KEV_BONUS = 10;
+const DEV_DEPENDENCY_FACTOR = 0.6;
+const DEFAULT_CVSS = 5;
+const INTERNAL_EXPOSURE_POINTS = 3;
+const CRITICALITY_POINTS = { critical: 10, high: 7, medium: 4, low: 0 };
+/* exploit likelihood uses the EPSS probability (chance of exploitation in the next 30 days), in bands */
+const EPSS_BANDS = [{ min: 0.1, pts: 25, label: "10% or more" }, { min: 0.01, pts: 15, label: "1–10%" }, { min: 0.001, pts: 5, label: "0.1–1%" }, { min: 0, pts: 0, label: "under 0.1%" }];
+const EPSS_UNKNOWN_POINTS = 5;
+const epssBand = e => EPSS_BANDS.find(b => e >= b.min);
+const round1 = n => Math.round(n * 10) / 10;
+const isDevScope = scope => Boolean(scope && scope.endsWith("-dev"));
+function severityFromScore(score) {
+  if (score >= 80) return "critical";
+  if (score >= 60) return "high";
+  if (score >= 35) return "medium";
+  return "low";
+}
+function computePriorityScore(input) {
+  const cvssPoints = ((input.cvssScore ?? DEFAULT_CVSS) / 10) * SCORE_WEIGHTS.cvss;
+  const exploitPoints = input.kev ? SCORE_WEIGHTS.exploit : input.epss == null ? EPSS_UNKNOWN_POINTS : epssBand(input.epss).pts;
+  let reachabilityPoints;
+  if (!input.reachabilityKnown) reachabilityPoints = SCORE_WEIGHTS.reachability * 0.5;
+  else if (input.reachable) reachabilityPoints = SCORE_WEIGHTS.reachability;
+  else reachabilityPoints = 0;
+  const exposurePoints = input.internetFacing ? SCORE_WEIGHTS.exposure : INTERNAL_EXPOSURE_POINTS;
+  const criticalityPoints = CRITICALITY_POINTS[input.criticalityTier] ?? CRITICALITY_POINTS.medium;
+  const kevBonus = input.kev ? KEV_BONUS : 0;
+  const scopeFactor = isDevScope(input.dependencyScope) ? DEV_DEPENDENCY_FACTOR : 1;
+  const raw = cvssPoints + exploitPoints + reachabilityPoints + exposurePoints + criticalityPoints + kevBonus;
+  const total = raw * scopeFactor;
+  const priorityScore = Math.round(Math.min(100, Math.max(0, total)));
+  return {
+    priorityScore,
+    severityNormalized: severityFromScore(priorityScore),
+    raw,
+    components: {
+      cvssPoints: round1(cvssPoints), exploitPoints: round1(exploitPoints), reachabilityPoints: round1(reachabilityPoints),
+      exposurePoints: round1(exposurePoints), criticalityPoints, kevBonus, scopeFactor,
+    },
+  };
+}
+/* CVSS v3 qualitative rating, for the "CVSS alone" contrast */
+const cvssSeverity = c => c >= 9 ? "critical" : c >= 7 ? "high" : c >= 4 ? "medium" : "low";
+
+/* ---------------------------------------------------------------- policy (src/lib/policy.ts + seed) */
+const DEFAULT_RULES = [
+  { name: "Critical — auto-remediate", minPriority: 80, action: "auto_pr", blocksMerge: true },
+  { name: "High — PR review required", minPriority: 60, action: "pr_review", blocksMerge: true },
+  { name: "Medium — comment on PR", minPriority: 35, action: "track_only", blocksMerge: false },
+  { name: "Low — track in backlog", minPriority: 0, action: "track_only", blocksMerge: false },
+];
+function decidePolicy(priorityScore, rules) {
+  for (const rule of rules) {
+    if (priorityScore >= rule.minPriority) return { action: rule.action, blocksMerge: rule.blocksMerge, ruleName: rule.name };
+  }
+  return { action: "track_only", blocksMerge: false, ruleName: "default (no matching rule)" };
+}
+/* ---------------------------------------------------------------- SLA (src/lib/sla.ts) */
+const DEFAULT_SLA_DAYS = { kev: 7, critical: 7, high: 30, medium: 90, low: 180 };
+function slaDaysFor(severity, kev, policy) {
+  const bucket = policy[severity] ?? policy.medium;
+  return kev ? Math.min(bucket, policy.kev) : bucket;
+}
+let RULES = DEFAULT_RULES.map(r => ({ ...r }));
+let SLA = { ...DEFAULT_SLA_DAYS };
+
+/* ---------------------------------------------------------------- entitlements (src/lib/access.ts) */
+const ROLES = ["developer", "security_engineer", "engineering_manager", "executive", "compliance", "platform_owner"];
+const ROLE_LABEL = { developer: "Developer", security_engineer: "Security engineer", engineering_manager: "Eng manager", executive: "CISO / exec", compliance: "Compliance", platform_owner: "Platform owner", sdlc_agent: "SDLC agent" };
+const PAGE_ROLES = {
+  dashboard: [...ROLES],
+  integrations: ["security_engineer", "platform_owner"],
+  repos: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+  findings: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+  scans: ["security_engineer", "engineering_manager", "compliance", "platform_owner"],
+  audit: ["security_engineer", "compliance", "platform_owner"],
+  suppressions: ["developer", "security_engineer", "engineering_manager", "compliance", "platform_owner"],
+  policy: ["security_engineer", "platform_owner"],
+  compliance: ["compliance", "executive", "security_engineer", "platform_owner"],
+  adapters: ["security_engineer", "platform_owner"],
+  users: ["platform_owner"],
+};
+const PAGE_LABEL = { dashboard:"Dashboard", integrations:"Integrations", repos:"Repos", findings:"Findings", scans:"Scans", audit:"Audit log", suppressions:"Exceptions", policy:"Policy", compliance:"Compliance", adapters:"Adapters", users:"Users" };
+const ACTION_ROLES = {
+  scan: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+  onboardRepo: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+  importFromConnector: ["security_engineer", "engineering_manager", "platform_owner"],
+  requestSuppression: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+  approveSuppression: ["security_engineer", "platform_owner"],
+  revokeSuppression: ["security_engineer", "engineering_manager", "platform_owner"],
+  markFixed: ["security_engineer", "engineering_manager", "platform_owner"],
+  riskDecision: ["security_engineer", "platform_owner"],
+  remediate: ["security_engineer", "engineering_manager", "platform_owner"],
+  editPolicy: ["security_engineer", "platform_owner"],
+  manageConnectors: ["security_engineer", "platform_owner"],
+  exportVex: ["developer", "security_engineer", "engineering_manager", "compliance", "platform_owner"],
+  exportFindings: ["developer", "security_engineer", "engineering_manager", "compliance", "platform_owner"],
+  reopenFinding: ["security_engineer", "engineering_manager", "platform_owner"],
+  assignFinding: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+  editRepo: ["security_engineer", "engineering_manager", "platform_owner"],
+  editRepoRisk: ["security_engineer", "platform_owner"],
+  archiveRepo: ["security_engineer", "platform_owner"],
+  deleteRepo: ["platform_owner"],
+  manageUsers: ["platform_owner"],
+  /* not an Everlit permission — the git provider's branch protection; shown so the agent boundary is visible */
+  mergeFixPr: ["developer", "security_engineer", "engineering_manager", "platform_owner"],
+};
+const roleCan = (role, action) => ACTION_ROLES[action].includes(role);
+const isTeamScoped = role => role === "developer";
+/* the SDLC agent's own, deliberately narrow entitlements */
+const AGENT_ACTIONS = new Set(["scan", "remediate"]);
+const canDo = (role, action) => role === "sdlc_agent" ? AGENT_ACTIONS.has(action) : roleCan(role, action);
+
+const ACTION_LABEL = {
+  scan: "Run a scan", onboardRepo: "Onboard a repo", importFromConnector: "Bulk-import repos via org connector",
+  requestSuppression: "Request an exception", approveSuppression: "Approve an exception", revokeSuppression: "Revoke an exception",
+  markFixed: "Mark a finding fixed by hand", riskDecision: "Accept risk / mark false positive", remediate: "Start a fix branch & PR",
+  editPolicy: "Edit policy rules & SLAs", manageConnectors: "Manage git connectors", exportVex: "Export VEX",
+  exportFindings: "Export findings CSV", reopenFinding: "Reopen a closed finding", assignFinding: "Assign a finding",
+  editRepo: "Edit repo settings / tighten the gate", editRepoRisk: "Change exposure, criticality or loosen the gate",
+  archiveRepo: "Archive a repo", deleteRepo: "Delete a repo", manageUsers: "Assign users & roles", mergeFixPr: "Approve & merge the fix PR",
+};
+const DENY_REASON = {
+  importFromConnector: "The connector token sees every team's repos.",
+  riskDecision: "A security sign-off. Teams can't self-declare it.",
+  editRepoRisk: "It re-scores findings or loosens the PR gate.",
+  approveSuppression: "Security review only (two-person rule).",
+  manageUsers: "Platform owner only.",
+  editPolicy: "Policy is a single point of organizational risk.",
+  manageConnectors: "Connectors hold org-wide credentials.",
+};
+const ALLOW_NOTE = {
+  approveSuppression: "Never your own request (two-person rule).",
+  editRepo: null,
+  mergeFixPr: "Via your git provider's branch protection.",
+};
+const AGENT_DENY = "Agents act only through branches & PRs. Decisions stay with humans.";
+function denyReason(role, action) {
+  if (role === "sdlc_agent") return action === "mergeFixPr" ? "An agent never approves or merges its own work." : AGENT_DENY;
+  return DENY_REASON[action] || "Not in this role's entitlements.";
+}
+function allowNote(role, action) {
+  if (role === "engineering_manager" && action === "editRepo") return "Own team's repos only.";
+  if (role === "sdlc_agent" && action === "remediate") return "PR opens only after CI passes.";
+  if (role === "sdlc_agent" && action === "scan") return "Assigned repos only, including fix branches.";
+  return ALLOW_NOTE[action] || "";
+}
+
+/* ---------------------------------------------------------------- formatting helpers */
+const SEV_ICON = { critical: "flame", high: "arrowUp", medium: "minus", low: "arrowDown" };
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const badge = (sev, text) => `<span class="badge sev-${sev}">${ic(SEV_ICON[sev])}${esc(text || cap(sev))}</span>`;
+const ACTION_TEXT = {
+  auto_pr: { t: "Auto-fix PR", d: "Everlit pushes a fix branch. The PR opens only after the repo's own CI passes on it." },
+  pr_review: { t: "Fix PR, review required", d: "A fix PR is prepared and needs a reviewer from the owning team." },
+  track_only: { t: "Track & comment", d: "Commented on pull requests and tracked in the backlog. Doesn't block." },
+  escalate: { t: "Escalate", d: "Routed to security for a decision." },
+};
+const DAY = 864e5;
+const fmtDate = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const fmtShort = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const today = new Date(); today.setHours(12, 0, 0, 0);
+const addDays = n => new Date(today.getTime() + n * DAY);
+
+const SERIES = [
+  { k: "cvssPoints", name: "CVSS", c: "var(--s1)", rule: "CVSS / 10 × 35" },
+  { k: "exploitPoints", name: "Exploitability", c: "var(--s2)", rule: "KEV 25 · EPSS ≥10% 25 · 1–10% 15 · 0.1–1% 5 · <0.1% 0" },
+  { k: "reachabilityPoints", name: "Import evidence", c: "var(--s3)", rule: "imported 15 · unknown 7.5 · not imported 0" },
+  { k: "exposurePoints", name: "Exposure", c: "var(--s4)", rule: "internet-facing 15 · internal 3" },
+  { k: "criticalityPoints", name: "Criticality", c: "var(--s5)", rule: "critical 10 · high 7 · medium 4 · low 0" },
+  { k: "kevBonus", name: "KEV bonus", c: "var(--s6)", rule: "+10 when on the CISA KEV list" },
+];
+
+/* builds the stacked bar's layers once; paintBar() retargets clip-paths (interruptible CSS transitions) */
+function buildBar(el, withTips) {
+  el.innerHTML = `<div class="ghost"></div>` + SERIES.map((s, i) =>
+    `<div class="seg-fill" data-k="${s.k}" style="background:${s.c}"${withTips ? ` data-tip=""` : ""}></div>`).join("") +
+    `<div class="tick-lines" aria-hidden="true"></div>`;
+}
+function paintBar(el, b, showTicks) {
+  const f = b.components.scopeFactor;
+  let acc = 0, lastVisible = null;
+  const parts = SERIES.map(s => {
+    const w = b.components[s.k] * f;
+    const start = Math.min(acc, 100), end = Math.min(acc + w, 100);
+    acc += w;
+    if (end - start > 0.01) lastVisible = s.k;
+    return { s, w, start, end };
+  });
+  parts.forEach(({ s, w, start, end }) => {
+    const seg = el.querySelector(`[data-k="${s.k}"]`);
+    const isLast = s.k === lastVisible;
+    const vis = end - start > 0.01;
+    // 2px surface gap: each segment gives up 1px at both inner edges
+    const left = start <= 0 ? "0%" : `calc(${start}% + 1px)`;
+    const right = vis ? (isLast ? `${100 - end}%` : `calc(${100 - end}% + 1px)`) : `${100 - start}%`;
+    seg.style.clipPath = `inset(0 ${right} 0 ${left} round 0 ${isLast ? 4 : 0}px ${isLast ? 4 : 0}px 0)`;
+    if (seg.hasAttribute("data-tip")) {
+      const raw = b.components[s.k];
+      seg.dataset.tip = `<b>${s.name}: ${round1(raw * f)} pts</b>${f < 1 ? ` (${raw} × 0.6)` : ""}<br>${s.rule}`;
+    }
+  });
+  const ghost = el.querySelector(".ghost");
+  const total = Math.min(acc, 100), pre = Math.min(b.raw, 100);
+  ghost.style.clipPath = f < 1 && pre > total ? `inset(0 ${100 - pre}% 0 calc(${total}% + 2px) round 0 4px 4px 0)` : `inset(0 ${100 - total}% 0 ${total}%)`;
+  const tl = el.querySelector(".tick-lines");
+  if (showTicks && !tl.childElementCount) tl.innerHTML = [35, 60, 80].map(v => `<span style="left:${v}%"></span>`).join("");
+}
+
+/* ---------------------------------------------------------------- tooltip (delay first, instant after) */
+const tip = $("#tip");
+let tipTimer = null, tipHideTimer = null, tipWarm = false;
+function placeTip(target, x) {
+  const r = target.getBoundingClientRect();
+  const px = Math.min(Math.max(x ?? r.left + r.width / 2, 140), innerWidth - 140);
+  tip.style.left = px + "px";
+  tip.style.top = r.top + "px";
+}
+document.addEventListener("pointerover", e => {
+  const t = e.target.closest("[data-tip]");
+  if (!t || !t.dataset.tip) return;
+  clearTimeout(tipHideTimer); clearTimeout(tipTimer);
+  const show = () => { tip.innerHTML = t.dataset.tip; placeTip(t, e.clientX); tip.classList.toggle("instant", tipWarm); tip.classList.add("show"); tipWarm = true; };
+  tipWarm ? show() : (tipTimer = setTimeout(show, 150));
+});
+document.addEventListener("pointermove", e => {
+  const t = e.target.closest("[data-tip]");
+  if (t && tip.classList.contains("show")) { tip.innerHTML = t.dataset.tip; placeTip(t, e.clientX); }
+});
+document.addEventListener("pointerout", e => {
+  const t = e.target.closest("[data-tip]");
+  if (!t || (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("[data-tip]"))) return;
+  clearTimeout(tipTimer);
+  tip.classList.remove("show");
+  tipHideTimer = setTimeout(() => { tipWarm = false; }, 300);
+});
+addEventListener("scroll", () => tip.classList.remove("show"), { passive: true });
+
+/* ---------------------------------------------------------------- segmented controls */
+function syncSeg(seg) {
+  const inputs = $$("input", seg);
+  const idx = Math.max(0, inputs.findIndex(i => i.checked));
+  seg.style.setProperty("--idx", idx);
+}
+function initSegs() {
+  $$(".seg").forEach(seg => { syncSeg(seg); seg.addEventListener("change", () => syncSeg(seg)); });
+}
+function setRadio(name, value) {
+  const el = $(`input[name="${name}"][value="${value}"]`);
+  if (el) { el.checked = true; syncSeg(el.closest(".seg")); }
+}
+
+/* ================================================================ HERO */
+const HERO_INPUT = { cvss: 7.2, epss: 1.24, kev: false, reach: "yes", net: true, tier: "critical", scope: "runtime" };
+function toInput(p) {
+  return {
+    cvssScore: p.cvss, epss: p.epss / 100, kev: p.kev,
+    reachable: p.reach === "yes", reachabilityKnown: p.reach !== "unknown",
+    internetFacing: p.net, criticalityTier: p.tier, dependencyScope: p.scope === "dev" ? "direct-dev" : "direct-runtime",
+  };
+}
+function renderHero() {
+  const b = computePriorityScore(toInput(HERO_INPUT));
+  const sev = b.severityNormalized;
+  $("#heroScore").innerHTML = `${b.priorityScore} <small>/ 100</small>`;
+  $("#heroBadge").innerHTML = badge(sev);
+  $("#heroCvssBadge").innerHTML = badge(cvssSeverity(7.2));
+  const bar = $("#heroBar"); buildBar(bar, true); paintBar(bar, b, false);
+  $("#heroWhy").innerHTML = [
+    ["s2", "Exploit likelihood", "EPSS 1.24% in 30 days", b.components.exploitPoints],
+    ["s3", "Import evidence", "imported in 6 files", b.components.reachabilityPoints],
+    ["s4", "Exposure", "internet-facing", b.components.exposurePoints],
+    ["s5", "Criticality", "payments-api, tier critical", b.components.criticalityPoints],
+  ].map(([c, n, d, v]) => `<div class="why-row"><span class="dot" style="background:var(--${c})"></span><span><b>${n}</b> · ${d}</span><span class="tnum muted">+${v}</span></div>`).join("");
+  const d = decidePolicy(b.priorityScore, RULES);
+  const days = slaDaysFor(sev, false, SLA);
+  $("#heroFoot").innerHTML = `<span class="chip">${ic("pr")} ${ACTION_TEXT[d.action].t}</span><span class="chip">${ic(d.blocksMerge ? "lock" : "unlock")} ${d.blocksMerge ? "Blocks merge" : "Merge allowed"}</span><span class="chip">${ic("clock")} Fix within ${days} days</span>`;
+}
+
+/* ================================================================ LIFECYCLE */
+const STAGES = [
+  { icon: "key", short: "Entitlements", title: "Entitlements: who can see what",
+    body: ["Six roles, assigned by the platform owner. Pages and actions are checked against one table, so a hidden button and a blocked URL can't drift apart.",
+           "Developers see only repos their own team owns. Security, platform and engineering managers work across teams.",
+           "Vulnerability data is sensitive, so nothing is visible by default."],
+    example: "role: developer · team: Payments Platform → sees payments-api, nothing else",
+    audit: "user.role_changed  dev.payments@acme.example → Developer  (by Platform Owner)",
+    actions: ["manageUsers"], pages: true },
+  { icon: "plug", short: "Onboard", title: "Onboard repos with their risk context",
+    body: ["Pick repos from a connected organization, or bulk-import them all through the org connector: GitHub, GitLab, Bitbucket or Azure DevOps.",
+           "Each repo records its owning team, internet exposure and business criticality. That's the context the score uses.",
+           "Only security or the platform owner can change exposure or criticality, because doing so re-scores findings."],
+    example: "payments-api · team Payments Platform · internet-facing · tier critical · npm",
+    audit: "repo.onboarded  payments-api  (connector: github)",
+    actions: ["onboardRepo", "importFromConnector", "manageConnectors", "editRepoRisk"] },
+  { icon: "search", short: "Scan", title: "Scan with OSV, or bring your own scanner",
+    body: ["Manifests and lockfiles across 8 ecosystems: npm, PyPI, Maven, Go, RubyGems, NuGet, Cargo, Composer.",
+           "Triggered by push webhooks, schedules or on demand, always against the live manifest.",
+           "If OSV can't answer for every package, the scan is marked degraded and nothing is silently closed."],
+    example: "scan #1842 · 312 packages · OSV answered 312/312 · 1 new finding",
+    audit: "scan.completed  payments-api  (trigger: push)",
+    actions: ["scan", "exportFindings"] },
+  { icon: "layers", short: "Enrich", title: "Enrich with the signals CVSS ignores",
+    body: ["EPSS: the probability of exploitation in the next 30 days, scored in bands (10% or more, 1–10%, 0.1–1%, under 0.1%).",
+           "CISA KEV: is this being exploited in the wild right now?",
+           "Import evidence: does our code actually import the vulnerable package?",
+           "Every record comes from public, industry-standard sources: OSV.dev, the GitHub Advisory Database, NVD, CISA KEV and FIRST EPSS."],
+    example: "lodash 4.17.15 · CVE-2021-23337 · CVSS 7.2 · EPSS 1.24% · imported in 6 files",
+    audit: "finding.enriched  (epss, kev, reachability)",
+    actions: [], system: "Automatic. Runs inside every scan.", link: ["#sources", "See where the data comes from"] },
+  { icon: "gauge", short: "Score", title: "Score it, then apply policy & SLA",
+    body: ["A documented 0–100 priority: CVSS 35, exploitability 25, import evidence 15, exposure 15, criticality 10, plus +10 for KEV and ×0.6 for dev-only. Business context (exposure and criticality) moves a score by up to 22 points.",
+           "Policy rules are data, editable on the Policy page. The first rule whose threshold the score meets wins.",
+           "The bucket sets the fix SLA: 7, 30, 90 or 180 days. Known-exploited findings get 7."],
+    example: "priority 80 → \"Critical — auto-remediate\" · blocks merge · due in 7 days",
+    audit: "policy.evaluated  rule=\"Critical — auto-remediate\"",
+    actions: ["editPolicy"], link: ["#playground", "Try it in the score playground"] },
+  { icon: "gitMerge", short: "PR gate", title: "Gate the pull request before it merges",
+    body: ["A pre-merge check compares the PR's manifest against the base branch.",
+           "It blocks only on what this PR introduces, never on pre-existing debt.",
+           "An AI review reads only the PR's diff and flags risky code at the source (SQL injection, unsafe deserialization, missing auth checks) with a plain-language reason and a suggested fix. It is labelled \"AI suggestion\", cites the exact lines and never blocks a merge.",
+           "Every manifest the PR touches is scanned, compared with the merge-base, so a second package.json in a subfolder gets the same check.",
+           "If a source doesn't answer, the check reports Incomplete, never a green pass. Repos that enforce blocking can hold the merge (fail-closed), with a break-glass override that a second person approves and that expires on its own.",
+           "Blocking needs the org-wide switch on and the repo set to inherit or block. Anyone who can edit a repo can tighten its gate; only security can loosen it."],
+    example: "PR #477 · +1 finding introduced (priority 80) · 3 AI suggestions (advisory) → ✕ merge blocked",
+    audit: "pr_gate.blocked  payments-api#477 · ai_review.completed (3 suggestions)",
+    actions: ["editRepo", "editRepoRisk"] },
+  { icon: "users", short: "Triage", title: "Triage, or take a time-boxed exception",
+    body: ["Assign the finding to an owner on the team.",
+           "Request a suppression (up to 90 days), accepted risk (up to 365) or false positive (up to 365). Someone else must approve it.",
+           "Accepted risk and false positive are security sign-offs with a named risk owner and compensating controls, and every exception expires.",
+           "An approver account created by the requester is refused; approvals by accounts under 7 days old are flagged for compliance."],
+    example: "exception requested by Developer · Payments · awaiting Security Engineer review · 30 days",
+    audit: "exception.requested → exception.approved  (approver ≠ requester)",
+    actions: ["assignFinding", "requestSuppression", "approveSuppression", "riskDecision", "revokeSuppression"] },
+  { icon: "wrench", short: "Fix", title: "Fix: PRs open only after CI passes",
+    body: ["One branch per package, bumped to the highest fixed version any of its findings needs.",
+           "The PR opens only after the repo's own CI passes on that branch, and is only reported once it really exists.",
+           "Complex cases (major upgrades, CI failures, transitive dependencies, coordinated multi-artifact upgrades, no upstream fix yet) are routed to the SDLC agent squad, with a Jira ticket for the owning team."],
+    example: "branch everlit/fix-lodash-4.17.21 · patch bump · CI ✓ · PR #481 opened",
+    audit: "remediation.pr_opened  #481",
+    actions: ["remediate", "markFixed"], link: ["#agents", "See the SDLC agent squad"] },
+  { icon: "user", short: "Team verifies", title: "The team verifies. Humans approve, humans merge",
+    body: ["The owning team reviews the PR with its evidence: the diff, the CI result and a rescan of the branch.",
+           "Your git provider's branch protection still applies. Everlit never merges for you.",
+           "A mistaken close can be reopened by security or an engineering manager."],
+    example: "PR #481 approved by the Payments Platform team · merged to main",
+    audit: "finding.merge_detected  payments-api@main",
+    actions: ["mergeFixPr", "reopenFinding"] },
+  { icon: "refresh", short: "Rescan", title: "The rescan confirms. Closed only when provably gone",
+    body: ["The next scan reconciles. A finding auto-closes only if the scan could actually see it's gone.",
+           "Regressions reopen with their original first-seen date, and an upgrade that's still vulnerable doesn't count as a fix.",
+           "Every decision lands in the audit log and the VEX export."],
+    example: "rescan #1851 · lodash 4.17.21 · CVE-2021-23337 not present → fixed (by scanner)",
+    audit: "finding.fixed  closed_by=scanner · vex.exported",
+    actions: ["scan", "exportVex"], link: ["#verify", "Try the final check"] },
+];
+const LC = { stage: 0, role: "developer" };
+
+function initLifecycle() {
+  const chips = $("#roleChips");
+  [...ROLES, "sdlc_agent"].forEach(r => {
+    const lab = document.createElement("label");
+    lab.className = "rchip" + (r === "sdlc_agent" ? " rchip-agent" : "");
+    lab.innerHTML = `<input type="radio" name="role" value="${r}" ${r === LC.role ? "checked" : ""}><span>${r === "sdlc_agent" ? ic("bot") : ""}${ROLE_LABEL[r]}</span>`;
+    chips.appendChild(lab);
+  });
+  chips.addEventListener("change", e => { LC.role = e.target.value; renderPerm(true); });
+
+  const rail = $("#rail");
+  STAGES.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "rail-step"; b.setAttribute("role", "tab");
+    b.id = "tab-" + i; b.setAttribute("aria-controls", "stageMain");
+    b.innerHTML = `<span class="rdot">${ic(s.icon)}</span><span class="rlbl">${s.short}</span>`;
+    b.setAttribute("aria-label", `${i + 1}. ${s.short}`);
+    b.addEventListener("click", () => setStage(i));
+    rail.appendChild(b);
+  });
+  rail.addEventListener("keydown", e => {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const n = e.key === "Home" ? 0 : e.key === "End" ? STAGES.length - 1 : Math.min(STAGES.length - 1, Math.max(0, LC.stage + (e.key === "ArrowRight" ? 1 : -1)));
+    setStage(n); $("#tab-" + n).focus();
+  });
+  setStage(0, true);
+}
+function setStage(i, first) {
+  LC.stage = i;
+  $$(".rail-step").forEach((b, j) => {
+    b.setAttribute("aria-selected", String(j === i));
+    b.tabIndex = j === i ? 0 : -1;
+    b.classList.toggle("done", j < i);
+  });
+  $("#railFill").style.transform = `scaleX(${i / (STAGES.length - 1)})`;
+  const s = STAGES[i];
+  const main = $("#stageMain");
+  main.setAttribute("aria-labelledby", "tab-" + i);
+  main.innerHTML = `
+    <div class="stage-kicker">Stage ${String(i + 1).padStart(2, "0")} / ${STAGES.length}</div>
+    <h3>${esc(s.title)}</h3>
+    <ul>${s.body.map(t => `<li>${ic("check")}<span>${esc(t)}</span></li>`).join("")}</ul>
+    <div class="example"><span class="label">Example</span>${esc(s.example)}</div>
+    <div class="audit">${ic("scroll")}<span>Audit log: <code>${esc(s.audit)}</code></span></div>
+    ${s.link ? `<a class="stage-link" href="${s.link[0]}">${esc(s.link[1])} ${ic("arrowRight")}</a>` : ""}
+    <div class="stage-nav">
+      <button class="btn btn-secondary btn-sm" type="button" data-step="-1" ${i === 0 ? "disabled" : ""}>Previous</button>
+      <button class="btn btn-primary btn-sm" type="button" data-step="1" ${i === STAGES.length - 1 ? "disabled" : ""}>Next stage ${ic("arrowRight")}</button>
+    </div>`;
+  $$("[data-step]", main).forEach(b => b.addEventListener("click", () => setStage(LC.stage + Number(b.dataset.step))));
+  if (!first) { main.classList.remove("panel-swap"); void main.offsetWidth; main.classList.add("panel-swap"); }
+  renderPerm(!first);
+}
+function renderPerm(animate) {
+  const s = STAGES[LC.stage], role = LC.role;
+  const el = $("#stagePerm");
+  let html = `<h4>${ic(role === "sdlc_agent" ? "bot" : "user")} As ${esc(ROLE_LABEL[role])}</h4>`;
+  if (s.system) {
+    html += `<div class="perm-sub">${esc(s.system)}</div><ul><li class="yes"><span class="pi">${ic("check")}</span><span class="pname">No human action needed<span class="why2">Results are visible to anyone entitled to the finding.</span></span></li></ul>`;
+  } else {
+    html += `<div class="perm-sub">What this role is entitled to do at this stage</div><ul>` +
+      s.actions.map(a => {
+        const ok = canDo(role, a);
+        const note = ok ? allowNote(role, a) : denyReason(role, a);
+        return `<li class="${ok ? "yes" : "no"}"><span class="pi">${ic(ok ? "check" : "x")}</span><span class="pname">${esc(ACTION_LABEL[a])}${note ? `<span class="why2">${esc(note)}</span>` : ""}</span></li>`;
+      }).join("") + `</ul>`;
+  }
+  if (s.pages) {
+    if (role === "sdlc_agent") html += `<div class="scope-note">${ic("info")}<span>No UI pages. An API-only service identity, scoped to the repos it's assigned.</span></div>`;
+    else html += `<div class="label" style="margin-top:18px">Pages this role can open</div><div class="pages">` +
+      Object.keys(PAGE_ROLES).map(p => `<span class="chip ${PAGE_ROLES[p].includes(role) ? "" : "off"}">${PAGE_LABEL[p]}</span>`).join("") + `</div>`;
+  }
+  if (isTeamScoped(role)) html += `<div class="scope-note">${ic("info")}<span>Team-scoped: sees and acts on repos owned by the Payments Platform team only.</span></div>`;
+  el.innerHTML = html;
+  if (animate) { el.classList.remove("panel-swap"); void el.offsetWidth; el.classList.add("panel-swap"); }
+}
+
+/* ================================================================ PLAYGROUND */
+const P = { ...HERO_INPUT };
+const PRESETS = [
+  { id: "log4shell", label: "Log4Shell", p: { cvss: 10, epss: 94.4, kev: true, reach: "yes", net: true, tier: "critical", scope: "runtime" } },
+  { id: "dev98", label: "CVSS 9.8 in a dev dependency", p: { cvss: 9.8, epss: 2, kev: false, reach: "yes", net: false, tier: "medium", scope: "dev" } },
+  { id: "unused", label: "Critical CVSS, never imported", p: { cvss: 9.1, epss: 0.05, kev: false, reach: "no", net: false, tier: "low", scope: "runtime" } },
+  { id: "kevmed", label: "Medium CVSS, exploited & exposed", p: { cvss: 6.1, epss: 30, kev: true, reach: "yes", net: true, tier: "critical", scope: "runtime" } },
+];
+let lastScore = null, countRaf = 0;
+
+function initPlayground() {
+  const pr = $("#presets");
+  pr.innerHTML = `<span class="label" style="align-self:center;margin-right:4px">Presets</span>` +
+    PRESETS.map(x => `<button type="button" class="preset" data-preset="${x.id}" aria-pressed="false">${esc(x.label)}</button>`).join("");
+  pr.addEventListener("click", e => {
+    const b = e.target.closest("[data-preset]"); if (!b) return;
+    const x = PRESETS.find(p => p.id === b.dataset.preset);
+    Object.assign(P, x.p); syncControls(); renderPlay("preset");
+    $$(".preset", pr).forEach(el => el.setAttribute("aria-pressed", String(el === b)));
+  });
+  buildBar($("#playBar"), true);
+  $("#legend").innerHTML = SERIES.map(s => `<div class="legend-item" data-k="${s.k}"><span class="dot" style="background:${s.c}"></span><span>${s.name}</span><b>0</b></div>`).join("");
+
+  const form = $("#controls");
+  form.addEventListener("input", e => {
+    const t = e.target;
+    if (t.id === "in-cvss") P.cvss = Number(t.value);
+    else if (t.id === "in-epss") P.epss = posToEpss(Number(t.value));
+    else if (t.id === "in-kev") P.kev = t.checked;
+    else if (t.id === "in-net") P.net = t.checked;
+    else if (t.name === "reach") P.reach = t.value;
+    else if (t.name === "tier") P.tier = t.value;
+    else if (t.name === "scope") P.scope = t.value;
+    $$(".preset").forEach(el => el.setAttribute("aria-pressed", "false"));
+    renderPlay("input");
+  });
+  $("#tableToggle").addEventListener("click", e => {
+    const w = $("#tableWrap"), open = w.hidden;
+    w.hidden = !open; e.currentTarget.setAttribute("aria-expanded", String(open));
+    e.currentTarget.lastChild.textContent = open ? " Hide table" : " View as table";
+  });
+  initPolicyEditor();
+  readHash();
+  syncControls();
+  renderPlay("init");
+}
+function syncControls() {
+  const c = $("#in-cvss"), ep = $("#in-epss");
+  c.value = P.cvss; ep.value = epssToPos(P.epss);
+  $("#in-kev").checked = P.kev; $("#in-net").checked = P.net;
+  setRadio("reach", P.reach); setRadio("tier", P.tier); setRadio("scope", P.scope);
+}
+function renderPlay(src) {
+  const b = computePriorityScore(toInput(P));
+  const c = b.components, sev = b.severityNormalized, f = c.scopeFactor;
+  // inputs
+  const cv = $("#in-cvss"), ep = $("#in-epss");
+  cv.style.setProperty("--fill", (P.cvss * 10) + "%");
+  ep.style.setProperty("--fill", epssToPos(P.epss) + "%");
+  $("#out-cvss").textContent = P.cvss.toFixed(1);
+  ep.disabled = P.kev;
+  $("#out-epss").textContent = P.kev ? "n/a (KEV)" : fmtEpss(P.epss);
+  $("#epssHint").textContent = P.kev ? "Ignored: known exploitation already earns the full 25 points." : `Chance of exploitation in the next 30 days · band ${epssBand(P.epss / 100).label}: ${epssBand(P.epss / 100).pts} of 25 points`;
+  // score figure — instant while dragging, count-up only for presets
+  const num = $("#scoreNum");
+  cancelAnimationFrame(countRaf);
+  if (src === "preset" && !reduceMotion && lastScore !== null) countUp(num, lastScore, b.priorityScore);
+  else num.innerHTML = `${b.priorityScore}<small>/100</small>`;
+  lastScore = b.priorityScore;
+  $("#scoreBadge").innerHTML = badge(sev);
+  const cs = cvssSeverity(P.cvss);
+  $("#vsCvss").innerHTML = `CVSS alone would say ${badge(cs, `${cap(cs)} ${P.cvss.toFixed(1)}`)}`;
+  // bar
+  const bar = $("#playBar");
+  bar.classList.toggle("slow", src === "preset" && !reduceMotion);
+  paintBar(bar, b, true);
+  bar.setAttribute("aria-label", `Score breakdown: ${SERIES.map(s => `${s.name} ${round1(c[s.k] * f)}`).join(", ")}${f < 1 ? ", scaled ×0.6 for dev scope" : ""}. Total ${b.priorityScore}.`);
+  // legend
+  SERIES.forEach(s => {
+    const li = $(`.legend-item[data-k="${s.k}"]`);
+    const v = round1(c[s.k] * f);
+    li.querySelector("b").textContent = (v > 0 ? "+" : "") + v;
+    li.classList.toggle("zero", v === 0);
+  });
+  const dn = $("#devNote");
+  dn.hidden = f === 1;
+  if (f < 1) $("#devText").textContent = `Dev / test-only dependency: ${Math.round(Math.min(100, b.raw))} × 0.6 = ${b.priorityScore}. The hatched area is what the dev scope took away.`;
+  // table
+  $("#tableWrap").innerHTML = `<table class="tbl"><thead><tr><th>Component</th><th>Rule</th><th class="n">Points</th></tr></thead><tbody>` +
+    SERIES.map(s => `<tr><td>${s.name}</td><td class="muted">${s.rule}</td><td class="n">${c[s.k]}</td></tr>`).join("") +
+    `<tr><td>Subtotal</td><td></td><td class="n">${round1(b.raw)}</td></tr><tr><td>Scope factor</td><td class="muted">dev / test only ×0.6</td><td class="n">×${f}</td></tr>` +
+    `<tr><td><b>Priority</b></td><td class="muted">rounded, clamped 0–100</td><td class="n"><b>${b.priorityScore}</b></td></tr></tbody></table>`;
+  $("#scoreLive").textContent = `Priority ${b.priorityScore}, ${sev}.`;
+  renderOutcome(b);
+  if (src !== "init" || location.hash.startsWith("#play?")) writeHash();
+}
+/* log scale: slider 0 → 0.01%, 25 → 0.1%, 50 → 1%, 75 → 10%, 100 → 100% (the band edges sit on the quarter marks) */
+function posToEpss(pos) { return Number((100 * Math.pow(10, pos / 25 - 4)).toPrecision(2)); }
+function epssToPos(pct) { return Math.round(Math.min(100, Math.max(0, (Math.log10(Math.max(pct, 0.01) / 100) + 4) * 25))); }
+function fmtEpss(pct) { return (pct >= 10 ? pct.toFixed(0) : pct >= 1 ? pct.toFixed(1) : pct.toFixed(2)) + "%"; }
+function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+function countUp(el, from, to) {
+  const t0 = performance.now(), dur = 420;
+  const step = now => {
+    const t = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - t, 3);
+    el.innerHTML = `${Math.round(from + (to - from) * e)}<small>/100</small>`;
+    if (t < 1) countRaf = requestAnimationFrame(step);
+  };
+  countRaf = requestAnimationFrame(step);
+}
+function renderOutcome(b) {
+  const sev = b.severityNormalized;
+  const d = decidePolicy(b.priorityScore, RULES);
+  const days = slaDaysFor(sev, P.kev, SLA);
+  const kevApplied = P.kev && SLA.kev < (SLA[sev] ?? SLA.medium);
+  const a = ACTION_TEXT[d.action] || ACTION_TEXT.track_only;
+  const actTone = d.action === "auto_pr" ? "tone-info" : d.action === "pr_review" ? "tone-warn" : "tone-neutral";
+  $("#outcome").innerHTML = `
+    <div class="card oc">
+      <div class="label">${ic("sliders")} Policy decision</div>
+      <div class="oc-big"><span class="oc-icon badge ${actTone}" style="height:34px;padding:0">${ic(d.action === "track_only" ? "list" : "pr")}</span>${esc(a.t)}</div>
+      <p>${esc(a.d)}</p>
+      <div class="rule">rule: "${esc(d.ruleName)}"</div>
+    </div>
+    <div class="card oc">
+      <div class="label">${ic("gitMerge")} Pre-merge gate</div>
+      <div class="oc-big"><span class="oc-icon badge ${d.blocksMerge ? "tone-bad" : "tone-good"}" style="height:34px;padding:0">${ic(d.blocksMerge ? "lock" : "unlock")}</span>${d.blocksMerge ? "Blocks merge" : "Merge allowed"}</div>
+      <p>${d.blocksMerge ? "A PR that introduces this finding can't merge," : "A PR that introduces this gets a comment, not a block,"} provided org-wide blocking is on and the repo inherits or blocks.</p>
+    </div>
+    <div class="card oc">
+      <div class="label">${ic("clock")} Remediation SLA</div>
+      <div class="oc-big"><span class="oc-icon badge ${days <= 7 ? "tone-bad" : days <= 30 ? "tone-warn" : "tone-neutral"}" style="height:34px;padding:0">${ic("clock")}</span>Fix within ${days} day${days === 1 ? "" : "s"}</div>
+      <p>Due <b style="color:var(--fg)">${fmtDate(addDays(days))}</b> if first seen today.${kevApplied ? ` The KEV deadline (${SLA.kev}d) is tighter than the ${sev} bucket (${SLA[sev]}d), so it wins.` : ""}</p>
+    </div>`;
+  $$("#rulesTbl tbody tr").forEach((tr, i) => tr.classList.toggle("hit", RULES[i] && RULES[i].name === d.ruleName));
+}
+function initPolicyEditor() {
+  const rt = $("#rulesTbl"), st = $("#slaTbl");
+  const draw = () => {
+    rt.innerHTML = `<thead><tr><th>Rule</th><th class="n">Min score</th><th>Action</th><th>Blocks</th></tr></thead><tbody>` +
+      RULES.map((r, i) => `<tr><td>${esc(r.name)}</td><td class="n"><input class="num-in" type="number" min="0" max="100" value="${r.minPriority}" data-rule="${i}" aria-label="Minimum score for ${esc(r.name)}"></td><td class="mono small">${r.action}</td><td><input type="checkbox" ${r.blocksMerge ? "checked" : ""} data-block="${i}" aria-label="${esc(r.name)} blocks merge"></td></tr>`).join("") + `</tbody>`;
+    st.innerHTML = `<thead><tr><th>Bucket</th><th class="n">Days</th></tr></thead><tbody>` +
+      Object.keys(SLA).map(k => `<tr><td>${k === "kev" ? "Known exploited (KEV)" : cap(k)}</td><td class="n"><input class="num-in" type="number" min="1" max="3650" value="${SLA[k]}" data-sla="${k}" aria-label="SLA days for ${k}"></td></tr>`).join("") + `</tbody>`;
+  };
+  draw();
+  const onEdit = e => {
+    const t = e.target;
+    if (t.dataset.rule) { const v = Math.max(0, Math.min(100, Number(t.value) || 0)); RULES[t.dataset.rule].minPriority = v; }
+    if (t.dataset.block) RULES[t.dataset.block].blocksMerge = t.checked;
+    if (t.dataset.sla) { const v = Math.max(1, Math.min(3650, Math.round(Number(t.value) || 1))); SLA[t.dataset.sla] = v; }
+    renderPlay("input"); renderCompare(); renderHero();
+  };
+  rt.addEventListener("input", onEdit); st.addEventListener("input", onEdit);
+  $("#resetPolicy").addEventListener("click", () => {
+    RULES = DEFAULT_RULES.map(r => ({ ...r })); SLA = { ...DEFAULT_SLA_DAYS };
+    draw(); renderPlay("input"); renderCompare(); renderHero();
+  });
+}
+/* playground state in the URL hash (#play?cvss=…) so a scenario can be reopened; works on file:// */
+function writeHash() {
+  const q = `play?cvss=${P.cvss}&epss=${P.epss}&kev=${+P.kev}&reach=${P.reach}&net=${+P.net}&tier=${P.tier}&scope=${P.scope}`;
+  try { history.replaceState(null, "", "#" + q); } catch (_) {}
+}
+function readHash() {
+  if (!location.hash.startsWith("#play?")) return;
+  const q = new URLSearchParams(location.hash.slice(6));
+  const num = (k, lo, hi, d) => { const v = Number(q.get(k)); return Number.isFinite(v) && q.has(k) ? Math.min(hi, Math.max(lo, v)) : d; };
+  P.cvss = round1(num("cvss", 0, 10, P.cvss)); P.epss = Number(num("epss", 0.01, 100, P.epss).toPrecision(3));
+  P.kev = q.get("kev") === "1"; P.net = q.get("net") !== "0";
+  if (["yes", "unknown", "no"].includes(q.get("reach"))) P.reach = q.get("reach");
+  if (["critical", "high", "medium", "low"].includes(q.get("tier"))) P.tier = q.get("tier");
+  if (["runtime", "dev"].includes(q.get("scope"))) P.scope = q.get("scope");
+  requestAnimationFrame(() => $("#playground").scrollIntoView());
+}
+
+/* ================================================================ COMPARE */
+const SCEN = [
+  { t: "Log4Shell remote code execution", pkg: "log4j-core 2.14.1 · order-service", p: { cvss: 10, epss: 94.4, kev: true, reach: "yes", net: true, tier: "critical", scope: "runtime" } },
+  { t: "Prototype pollution in a test helper", pkg: "dev dependency · internal tooling", p: { cvss: 9.8, epss: 2, kev: false, reach: "yes", net: false, tier: "medium", scope: "dev" } },
+  { t: "RCE in a package nobody imports", pkg: "transitive, not imported · internal-batch-jobs", p: { cvss: 9.1, epss: 0.05, kev: false, reach: "no", net: false, tier: "low", scope: "runtime" } },
+  { t: "SSRF in an image library", pkg: "import unknown · customer-portal", p: { cvss: 8.6, epss: 0.5, kev: false, reach: "unknown", net: false, tier: "high", scope: "runtime" } },
+  { t: "Path traversal in build tooling", pkg: "dev dependency · reporting-service", p: { cvss: 8.1, epss: 0.3, kev: false, reach: "yes", net: false, tier: "medium", scope: "dev" } },
+  { t: "ReDoS in the request parser", pkg: "imported · customer-portal", p: { cvss: 7.5, epss: 1.6, kev: false, reach: "yes", net: true, tier: "high", scope: "runtime" } },
+  { t: "Stored XSS, actively exploited", pkg: "on CISA KEV · payments-api", p: { cvss: 6.1, epss: 30, kev: true, reach: "yes", net: true, tier: "critical", scope: "runtime" } },
+  { t: "Open redirect at the login page", pkg: "imported · payments-api", p: { cvss: 4.7, epss: 0.8, kev: false, reach: "yes", net: true, tier: "critical", scope: "runtime" } },
+].map((s, i) => ({ ...s, id: i }));
+const PRI_FILL = { critical: "var(--crit)", high: "var(--high)", medium: "var(--med)", low: "var(--low)" };
+let cmpBy = "cvss", cmpAutoPlayed = false;
+
+function initCompare() {
+  const list = $("#cmpList");
+  list.innerHTML = SCEN.map(s => `<li class="cmp-row" data-id="${s.id}" tabindex="0"></li>`).join("");
+  $("input[name=rank][value=cvss]").closest(".seg").addEventListener("change", e => { cmpBy = e.target.value; cmpAutoPlayed = true; reorderCompare(); });
+  renderCompare();
+  reorderCompare(true);
+}
+function cmpData() {
+  return SCEN.map(s => {
+    const b = computePriorityScore(toInput(s.p));
+    const d = decidePolicy(b.priorityScore, RULES);
+    return { ...s, b, d, sla: slaDaysFor(b.severityNormalized, s.p.kev, SLA) };
+  });
+}
+function ranks(data) {
+  const byC = [...data].sort((a, b) => b.p.cvss - a.p.cvss || a.id - b.id).map(x => x.id);
+  const byE = [...data].sort((a, b) => b.b.priorityScore - a.b.priorityScore || b.p.cvss - a.p.cvss).map(x => x.id);
+  return { byC, byE };
+}
+function renderCompare() {
+  const data = cmpData(), { byC, byE } = ranks(data);
+  data.forEach(x => {
+    const row = $(`.cmp-row[data-id="${x.id}"]`);
+    const rc = byC.indexOf(x.id) + 1, re = byE.indexOf(x.id) + 1;
+    const rank = cmpBy === "cvss" ? rc : re;
+    const delta = rc - re;
+    const dHtml = cmpBy === "everlit" ? (delta > 0 ? `<span class="delta up">${ic("arrowUp")}${delta}</span>` : delta < 0 ? `<span class="delta down">${ic("arrowDown")}${-delta}</span>` : `<span class="delta same">${ic("minus")}</span>`) : "";
+    const cs = cvssSeverity(x.p.cvss), sev = x.b.severityNormalized;
+    row.innerHTML = `
+      <div class="rank"><span>#${rank}</span>${dHtml}</div>
+      <div class="cmp-title"><b>${esc(x.t)}</b><span>${esc(x.pkg)}</span></div>
+      <div class="cmp-meta">
+        <div class="cmp-cell"><span class="label">CVSS</span><span class="val"><b class="tnum">${x.p.cvss.toFixed(1)}</b>${badge(cs)}</span></div>
+        <div class="cmp-cell"><span class="label">Everlit</span><span class="val"><b class="tnum" style="min-width:22px">${x.b.priorityScore}</b><span class="meter"><i style="background:${PRI_FILL[sev]};transform:scaleX(${x.b.priorityScore / 100})"></i></span>${badge(sev)}</span></div>
+        <div class="cmp-cell"><span class="label">SLA</span><span class="val tnum">${x.sla}d</span></div>
+        <div class="cmp-cell"><span class="label">Gate</span><span class="val" data-tip="${x.d.blocksMerge ? "Blocks merge under the default policy" : "Comment only, no block"}">${ic(x.d.blocksMerge ? "lock" : "unlock")}${x.d.blocksMerge ? "Blocks" : "Allowed"}</span></div>
+      </div>`;
+    row.setAttribute("aria-label", `${x.t}: CVSS ${x.p.cvss}, Everlit priority ${x.b.priorityScore} ${sev}, SLA ${x.sla} days, ${x.d.blocksMerge ? "blocks merge" : "merge allowed"}`);
+  });
+}
+function reorderCompare(instant) {
+  const list = $("#cmpList"), data = cmpData(), { byC, byE } = ranks(data);
+  const order = cmpBy === "cvss" ? byC : byE;
+  const rows = [...list.children];
+  const first = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+  order.forEach(id => list.appendChild(list.querySelector(`[data-id="${id}"]`)));
+  renderCompare();
+  if (instant || reduceMotion) return;
+  rows.forEach(r => {
+    const dy = first.get(r) - r.getBoundingClientRect().top;
+    if (Math.abs(dy) > 1) r.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 520, easing: "cubic-bezier(0.77,0,0.175,1)" });
+  });
+}
+
+/* ================================================================ SDLC AGENTS (scripted example runs) */
+const AGENTS = [
+  { k: "planner", name: "Planner", role: "Reads the advisory & changelog, maps call sites, writes a plan", icon: "search" },
+  { k: "fixer", name: "Fixer", role: "Writes the change on a fix branch", icon: "wrench" },
+  { k: "tester", name: "Tester", role: "Regression tests + the repo's own CI, in a sandbox", icon: "flask" },
+  { k: "verifier", name: "Security verifier", role: "Rescans the branch, runs the PR gate on it", icon: "shield" },
+  { k: "handoff", name: "Hand-off", role: "Opens the PR with an evidence pack for the team", icon: "pr" },
+];
+const SCENARIOS = [
+  { id: "major", label: "Major version bump", team: "Payments Platform", pr: 482,
+    title: "jsonwebtoken 8.5.1 → 9.0.0 · payments-api",
+    ticket: "SEC-1179", today: "Major upgrade 8.5.1 → 9.0.0. Version 9 changes jwt.verify() defaults, so the call sites need code changes and tests, not just a version bump.",
+    plan: ["Reading advisory + 9.0.0 changelog: 3 breaking changes", "Import evidence: 4 call sites in src/auth/*.ts", "Breaking: verify() now rejects insecure key sizes; default algorithms changed", "Plan: bump to ^9.0.0, pin algorithms explicitly at all 4 call sites · risk: medium"],
+    attempts: [
+      { fix: ["Branch everlit-agent/jsonwebtoken-9.0.0", "package.json ^8.5.1 → ^9.0.0 · lockfile regenerated", "Patched 4 call sites: verify(token, key, { algorithms: ['RS256'] })"],
+        test: ["npm ci ✓", "npm test: 212 passed, 2 failed", "auth.spec.ts › rejects legacy HS256 token: expected 401, got 500"], ok: false },
+      { fix: ["Mapped JsonWebTokenError → 401 in auth middleware"],
+        test: ["npm test: 214 passed, 0 failed", "+6 regression tests for the patched call sites · coverage 81.2% → 82.0%", "Repo CI (GitHub Actions) on branch: passed"], ok: true },
+    ],
+    verify: ["Rescan of branch: jsonwebtoken 9.0.0. Advisory not present", "OSV answered 312/312 packages, so the scan isn't degraded", "PR gate on branch: 0 new findings introduced"],
+    evidence: [["Diff", "package.json, lockfile, 4 call sites in src/auth, 1 middleware change"], ["Breaking changes handled", "algorithm pinning, error-to-401 mapping"], ["Tests", "214/214 passing · 6 new regression tests · coverage +0.8%"], ["Security", "branch rescan clean · PR gate: nothing new introduced"], ["Rollback", "revert PR #482. No data migrations"]],
+    failTest: ["npm test: 209 passed, 5 failed", "session.spec.ts › refresh tokens signed with HS256 no longer verify"] },
+  { id: "ci", label: "Bot bump failed CI", team: "Web Experience", pr: 517,
+    title: "node-fetch 2.6.0 → 2.6.7 · customer-portal",
+    ticket: "SEC-1184", today: "CI failed on everlit/fix-node-fetch-2.6.7, so no PR was opened. The upgrade changes behaviour the existing tests rely on, so it needs code changes alongside the bump.",
+    plan: ["Picked up existing bot branch everlit/fix-node-fetch-2.6.7", "CI log: 3 failures in profile-client.spec.ts", "Cause: 2.6.7 drops the Authorization and Cookie headers when a redirect leads to another host (the CVE-2022-0235 fix); the tests asserted the old behaviour", "Plan: keep the bump, call the profile API's canonical host directly so no cross-host redirect is needed, update fixtures · risk: low"],
+    attempts: [
+      { fix: ["Reused bot branch (no duplicate PR)", "src/profile.ts: request the canonical profile host directly", "Updated 3 test fixtures to the new redirect behaviour"],
+        test: ["npm ci ✓ · npm test: 388 passed, 0 failed", "+2 regression tests: credentials sent to the same host, never after a cross-host redirect", "Repo CI (GitHub Actions) on branch: passed"], ok: true },
+    ],
+    verify: ["Rescan of branch: node-fetch 2.6.7. Advisory not present", "PR gate on branch: 0 new findings introduced"],
+    evidence: [["Diff", "1 client change, 3 fixtures updated, bump kept as the bot made it"], ["Root cause of the CI failure", "intended security fix in 2.6.7: credentials are no longer forwarded across hosts"], ["Tests", "388/388 passing · 2 new regression tests"], ["Security", "branch rescan clean"], ["Rollback", "revert PR #517"]],
+    failTest: ["npm test: 385 passed, 3 failed", "e2e/profile.spec.ts › session cookie missing after the login redirect"] },
+  { id: "transitive", label: "Transitive dependency", team: "Data Platform", pr: 233,
+    title: "minimist 1.2.5 via mkdirp 0.5.5 · reporting-service",
+    ticket: "SEC-1186", today: "minimist arrives through mkdirp, so the fix is either an overrides entry or a parent upgrade: a judgement call about blast radius.",
+    plan: ["minimist isn't a direct dependency: pulled in by mkdirp@0.5.5 ← handlebars-loader", "Option A: bump the parent mkdirp to 1.x (major, 2 call sites)", "Option B: npm overrides minimist → ^1.2.8 (no API change)", "Plan: option B, the smallest blast radius · risk: low"],
+    attempts: [
+      { fix: ["Branch everlit-agent/minimist-override", "package.json: \"overrides\": { \"minimist\": \"^1.2.8\" }", "Lockfile regenerated: minimist resolves to 1.2.8 everywhere"],
+        test: ["npm ci ✓ · npm test: 141 passed, 0 failed", "Build of report bundles: identical output hash", "Repo CI (GitHub Actions) on branch: passed"], ok: true },
+    ],
+    verify: ["Rescan of branch: transitive-runtime finding not present", "No other version of minimist left in the tree", "PR gate on branch: 0 new findings introduced"],
+    evidence: [["Diff", "1 overrides entry + lockfile"], ["Why not bump the parent", "mkdirp 1.x is a major with API changes; the override is enough"], ["Tests", "141/141 passing · build output unchanged"], ["Security", "branch rescan clean, no lingering versions"], ["Rollback", "remove the overrides entry"]],
+    failTest: ["npm test: 139 passed, 2 failed", "yargs CLI parsing differs under minimist 1.2.8 in scripts/export.js"] },
+  { id: "noupstream", label: "No upstream fix yet", team: "Web Experience", pr: 390,
+    title: "image-processing lib 2.4.0 · customer-portal",
+    ticket: "SEC-1188", today: "No fixed version has been published upstream yet, so the safe move is a mitigation plus a time-boxed exception, not a bump.",
+    plan: ["No fixed version upstream. A bump isn't possible", "Vulnerable path: EXIF parser, reached from the avatar upload handler", "Mitigation: disable EXIF parsing, cap input size, strip metadata before processing", "Plan: ship the mitigation + draft a time-boxed exception for security review · risk: low"],
+    attempts: [
+      { fix: ["Branch everlit-agent/avatar-exif-mitigation", "upload/pipeline.ts: exif: false, maxPixels 40M, strip metadata", "Drafted a 30-day suppression request (needs a second reviewer)"],
+        test: ["npm test: 96 passed, 0 failed", "+3 tests: EXIF never parsed, oversize rejected, metadata stripped", "Repo CI (GitHub Actions) on branch: passed"], ok: true },
+    ],
+    verify: ["Rescan of branch: finding still present (package unchanged). Expected", "Import evidence: vulnerable EXIF path no longer called", "Finding stays open until upstream ships a fix or security approves the exception"],
+    evidence: [["Diff", "upload pipeline hardening, no dependency change"], ["Honest status", "the vulnerability is mitigated, not fixed. The finding stays open"], ["Tests", "96/96 passing · 3 new tests on the mitigated path"], ["Exception", "30-day suppression drafted. Security must approve (two-person rule)"], ["Follow-up", "the agent re-runs automatically when upstream publishes a fix"]],
+    failTest: ["npm test: 93 passed, 3 failed", "thumbnails.spec.ts › orientation lost without EXIF rotation"] },
+  { id: "bom", label: "Coordinated upgrade", team: "Order Management", pr: 1204,
+    title: "jackson-databind 2.13.2 → 2.13.4.2 · order-service (Maven)",
+    ticket: "SEC-1190", today: "jackson-databind is managed by jackson-bom, so the BOM has to move and every resolved version be re-verified; the new defaults also change date serialization.",
+    plan: ["Ecosystem: Maven (pom.xml). Version managed by jackson-bom", "Dependency tree: jackson-databind managed via jackson-bom", "Plan: bump the BOM to 2.13.4.20221013, verify the resolved version everywhere · risk: medium"],
+    attempts: [
+      { fix: ["Branch everlit-agent/jackson-2.13.4.2", "pom.xml: jackson-bom 2.13.2 → 2.13.4.20221013", "mvn dependency:tree: jackson-databind resolves to 2.13.4.2"],
+        test: ["mvn verify: 1,204 tests, 1 failure", "JsonDateSerializerTest › date format changed (missing JavaTimeModule)"], ok: false },
+      { fix: ["Registered JavaTimeModule explicitly in ObjectMapperConfig"],
+        test: ["mvn verify: 1,205 tests, 0 failures (+1 regression test)", "Repo CI (GitHub Actions) on branch: passed"], ok: true },
+    ],
+    verify: ["Rescan of branch: jackson-databind 2.13.4.2. Advisory not present", "PR gate on branch: 0 new findings introduced"],
+    evidence: [["Diff", "BOM version + 1 config class"], ["Behaviour change handled", "explicit JavaTimeModule registration"], ["Tests", "1,205/1,205 passing · 1 new regression test"], ["Security", "branch rescan clean"], ["Rollback", "revert PR #1204"]],
+    failTest: ["mvn verify: 1,204 tests, 2 failures", "OrderExportIT › polymorphic type handling rejected by new defaults"] },
+];
+const SIM = { sc: SCENARIOS[0], fail: false, events: [], i: 0, timer: 0, playing: false, started: false, t0: 0, approved: false };
+
+function buildEvents(sc, fail) {
+  const ev = [];
+  const A = (k, s, x) => ev.push({ t: "agent", k, s, ...x });
+  const L = (k, text, kind = "") => ev.push({ t: "log", k, text, kind });
+  A("planner", "run"); sc.plan.forEach(x => L("planner", x)); A("planner", "done");
+  const attempts = fail ? [0, 1, 2].map(n => ({ fix: sc.attempts[Math.min(n, sc.attempts.length - 1)].fix.slice(0, n === 0 ? undefined : 1), test: sc.failTest, ok: false })) : sc.attempts;
+  attempts.forEach((at, n) => {
+    if (n > 0) { ev.push({ t: "retry", n: n + 1 }); L("fixer", `Attempt ${n + 1}/3: addressing the failing tests`, "warn"); }
+    A("fixer", "run", { attempt: n + 1 }); at.fix.forEach(x => L("fixer", x)); A("fixer", "done");
+    A("tester", "run"); at.test.forEach((x, j) => L("tester", x, j === at.test.length - 1 ? (at.ok ? "ok" : "err") : "")); A("tester", at.ok ? "done" : "fail");
+  });
+  if (fail) {
+    A("verifier", "skip"); A("handoff", "run");
+    L("handoff", "Stopped after 3 attempts. Tests are still failing. No PR opened.", "err");
+    L("handoff", `Escalated to the ${sc.team} team on Jira ${sc.ticket}: plan, 3 attempted diffs, failing test output`, "warn");
+    L("handoff", "Finding stays open and the SLA clock keeps running", "dim");
+    A("handoff", "fail"); ev.push({ t: "end", ok: false });
+  } else {
+    A("verifier", "run"); sc.verify.forEach((x, j) => L("verifier", x, j === sc.verify.length - 1 ? "ok" : "")); A("verifier", "done");
+    A("handoff", "run");
+    L("handoff", `Opened PR #${sc.pr} with the evidence pack attached`, "ok");
+    L("handoff", `Assigned to the ${sc.team} team (repo POC) · 1 human approval required`);
+    L("handoff", `Linked to Jira ${sc.ticket}`);
+    L("handoff", "Agent cannot approve or merge its own PR. Waiting for the team", "dim");
+    A("handoff", "done"); ev.push({ t: "end", ok: true });
+  }
+  return ev;
+}
+function initAgents() {
+  const chips = $("#scenChips");
+  SCENARIOS.forEach((s, i) => {
+    const lab = document.createElement("label");
+    lab.className = "rchip";
+    lab.innerHTML = `<input type="radio" name="scen" value="${s.id}" ${i === 0 ? "checked" : ""}><span>${esc(s.label)}</span>`;
+    chips.appendChild(lab);
+  });
+  chips.addEventListener("change", e => { SIM.sc = SCENARIOS.find(s => s.id === e.target.value); resetSim(true); });
+  $("#failToggle").addEventListener("change", e => { SIM.fail = e.target.checked; resetSim(true); });
+  $("#playBtn").addEventListener("click", () => SIM.playing ? pauseSim() : playSim());
+  $("#replayBtn").addEventListener("click", () => resetSim(true));
+  $("#skipBtn").addEventListener("click", skipSim);
+  const squad = $("#squad");
+  AGENTS.forEach(a => {
+    const d = document.createElement("div");
+    d.className = "agent"; d.dataset.k = a.k; d.dataset.state = "queued";
+    d.innerHTML = `<span class="aicon">${ic(a.icon)}</span><b>${a.name} <span class="attempt" hidden></span></b><span class="arole">${a.role}</span><span class="astate"></span>`;
+    squad.appendChild(d);
+  });
+  resetSim(false);
+}
+const STATE_BADGE = {
+  queued: ["tone-neutral", "clock", "Queued"], run: ["tone-info", "refresh", "Running"], done: ["tone-good", "check", "Done"],
+  fail: ["tone-bad", "x", "Failed"], skip: ["tone-neutral", "minus", "Skipped"],
+};
+function setAgent(k, s, attempt) {
+  const el = $(`.agent[data-k="${k}"]`);
+  const prev = el.dataset.state;
+  el.dataset.state = s;
+  const [tone, icon, text] = STATE_BADGE[s];
+  const st = el.querySelector(".astate");
+  st.innerHTML = `<span class="badge ${tone}"><span>${ic(icon)}${text}</span></span>`;
+  if (prev !== s && SIM.animate) st.firstChild.classList.add("swap-in");
+  if (attempt) {
+    const at = el.querySelector(".attempt");
+    at.hidden = attempt < 2; at.textContent = `attempt ${attempt}/3`;
+  }
+}
+function resetSim(autoplay) {
+  clearTimeout(SIM.timer);
+  SIM.events = buildEvents(SIM.sc, SIM.fail); SIM.i = 0; SIM.playing = false; SIM.approved = false; SIM.t0 = 0;
+  SIM.animate = true;
+  AGENTS.forEach(a => { setAgent(a.k, "queued"); $(`.agent[data-k="${a.k}"] .attempt`).hidden = true; });
+  $("#retryArc").classList.remove("on");
+  $("#consoleLog").innerHTML = `<li><span class="ts">00:00.0</span><span class="who">everlit</span><span class="dim">Picked up: ${esc(SIM.sc.title)} <span class="cursor"></span></span></li>`;
+  $("#consoleTitle").textContent = `everlit-agents · ${SIM.sc.title.split(" · ")[0]}`;
+  $("#whyHuman").innerHTML = `${ic("info")}<div><b>Why this is a complex fix.</b> ${esc(SIM.sc.today)} <span class="muted">Routed to the SDLC agents · Jira ${esc(SIM.sc.ticket)}</span></div>`;
+  $("#handoff").innerHTML = `<div class="handoff"><div class="placeholder">${ic("bot", "i-lg")}<span>The squad's result, an evidence-pack PR or an honest escalation, will appear here.</span></div></div>`;
+  setPlayBtn();
+  if (autoplay) { if (reduceMotion) skipSim(); else playSim(); }
+}
+function setPlayBtn() {
+  const done = SIM.i >= SIM.events.length;
+  $("#playBtn").innerHTML = SIM.playing ? `${ic("pause")} Pause` : `${ic("play")} ${done ? "Done" : SIM.i ? "Resume" : "Run squad"}`;
+  $("#playBtn").disabled = done;
+}
+function playSim() { if (SIM.i >= SIM.events.length) return; SIM.playing = true; SIM.started = true; setPlayBtn(); tick(); }
+function pauseSim() { SIM.playing = false; clearTimeout(SIM.timer); setPlayBtn(); }
+function skipSim() { clearTimeout(SIM.timer); SIM.animate = false; while (SIM.i < SIM.events.length) apply(SIM.events[SIM.i++], false); SIM.playing = false; SIM.started = true; setPlayBtn(); }
+function tick() {
+  if (!SIM.playing) return;
+  if (SIM.i >= SIM.events.length) { SIM.playing = false; setPlayBtn(); return; }
+  const e = SIM.events[SIM.i++];
+  apply(e, true);
+  const delay = e.t === "log" ? 420 : e.t === "retry" ? 900 : e.t === "agent" && e.s === "run" ? 380 : 240;
+  SIM.timer = setTimeout(tick, delay);
+}
+function apply(e, live) {
+  const log = $("#consoleLog");
+  const cur = log.querySelector(".cursor"); if (cur) cur.remove();
+  if (e.t === "agent") setAgent(e.k, e.s, e.attempt);
+  else if (e.t === "log") {
+    SIM.t0 += 0.4 + (e.text.length % 7) / 10;
+    const li = document.createElement("li");
+    const name = AGENTS.find(a => a.k === e.k).name.split(" ").pop().toLowerCase();
+    li.innerHTML = `<span class="ts">${fmtT(SIM.t0)}</span><span class="who">${name}</span><span class="${e.kind}">${esc(e.text)}</span>`;
+    if (!live) li.style.animation = "none";
+    log.appendChild(li);
+    log.scrollTop = log.scrollHeight;
+  } else if (e.t === "retry") {
+    $("#retryArc").classList.add("on");
+    $("#retryLabel").textContent = `tests failed: retry ${e.n}/3`;
+  } else if (e.t === "end") renderHandoff(e.ok);
+}
+const fmtT = s => { const m = Math.floor(s / 60), r = s - m * 60; return `${String(m).padStart(2, "0")}:${r.toFixed(1).padStart(4, "0")}`; };
+function renderHandoff(ok) {
+  const sc = SIM.sc, el = $("#handoff");
+  if (ok) {
+    el.innerHTML = `<div class="handoff">
+      <h4>${ic("pr")} PR #${sc.pr} · evidence pack <span class="badge tone-info" style="margin-left:auto">${ic("user")} Awaiting team</span></h4>
+      <ul class="ev-list">${sc.evidence.map(([k, v]) => `<li>${ic("check")}<span><b>${esc(k)}:</b> ${esc(v)}</span></li>`).join("")}</ul>
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div class="label" style="margin-bottom:8px">Team verification (human)</div>
+        <div id="reviewArea" style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn btn-primary btn-sm" type="button" id="approveBtn">${ic("check")} Approve &amp; merge</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="changesBtn">Request changes</button>
+        </div>
+      </div></div>`;
+    $("#approveBtn").addEventListener("click", () => {
+      SIM.approved = true;
+      $("#reviewArea").innerHTML = `<span class="badge tone-good">${ic("gitMerge")} Merged by the ${esc(sc.team)} team</span><a class="btn btn-secondary btn-sm" href="#verify">Run the final check ${ic("arrowRight")}</a>`;
+      VER.from = { pr: sc.pr, title: sc.title, mitigation: sc.id === "noupstream" };
+      setOutcome(sc.id === "noupstream" ? "exception" : "clean");
+    });
+    $("#changesBtn").addEventListener("click", () => {
+      $("#reviewArea").innerHTML = `<span class="badge tone-warn">${ic("undo")} Changes requested. The agent revises on the same branch</span>`;
+    });
+  } else {
+    el.innerHTML = `<div class="handoff">
+      <h4>${ic("alert")} Escalated to a human <span class="badge tone-bad" style="margin-left:auto">${ic("x")} No PR opened</span></h4>
+      <ul class="ev-list bad">
+        <li>${ic("x")}<span><b>Stopped after 3 attempts:</b> tests still failing</span></li>
+        <li>${ic("file")}<span><b>Handed over:</b> the plan, all 3 attempted diffs, failing test output</span></li>
+        <li>${ic("clock")}<span><b>Finding stays open:</b> the SLA clock keeps running</span></li>
+      </ul>
+      <p class="small muted">No fake success. Exactly what happened, so an engineer starts from the agent's work instead of from zero.</p>
+    </div>`;
+  }
+}
+
+/* ================================================================ VERIFY (src/lib/reconcile.ts rules) */
+const VER = { k: "clean", from: null };
+const OUTCOMES = [
+  { k: "clean", label: "Clean rescan", s: "OSV answered for every package; the vulnerable version is gone" },
+  { k: "degraded", label: "Degraded scan", s: "OSV timed out for 3 of 312 packages" },
+  { k: "stillvuln", label: "Upgraded, still vulnerable", s: "Someone bumped to 4.17.19, but the fix is in 4.17.21" },
+  { k: "otherver", label: "Still present at another version", s: "Direct dep is 4.17.21; a transitive one still pulls 4.17.15" },
+  { k: "reappears", label: "Fixed, then it comes back", s: "A later revert reintroduces 4.17.15" },
+  { k: "exception", label: "Finding has an exception", s: "Accepted risk, approved by a second reviewer" },
+];
+function setOutcome(k) { VER.k = k; const r = $(`input[name=outcome][value=${k}]`); if (r) r.checked = true; renderVerify(); }
+function initVerify() {
+  $("#outcomes").innerHTML = OUTCOMES.map((o, i) => `<label class="ocard"><input type="radio" name="outcome" value="${o.k}" ${i === 0 ? "checked" : ""}><span class="radio"></span><span><b>${o.label}</b><span class="s">${o.s}</span></span></label>`).join("");
+  $("#outcomes").addEventListener("change", e => { VER.k = e.target.value; renderVerify(); });
+  renderVerify();
+}
+function renderVerify() {
+  const first = addDays(-5), due = addDays(2);
+  const prBy = "Everlit opened PR #481 after CI passed (patch bump)";
+  const base = [
+    { c: "info", i: "search", t: "First seen", d: "lodash 4.17.15 · CVE-2021-23337 · priority 80 · due " + fmtShort(due), at: first },
+    { c: "info", i: "pr", t: "Fix PR opened", d: prBy, at: addDays(-4) },
+    { c: "info", i: "user", t: "Team approved & merged", d: "Reviewed by the Payments Platform team · lodash → 4.17.21", at: addDays(-1) },
+  ];
+  let steps, status, sub, rule, ruleText;
+  switch (VER.k) {
+    case "clean":
+      steps = [...base, { c: "good", i: "check", t: "Rescan: not present", d: "OSV answered 312/312 · scan healthy · no other version in the tree", at: today }];
+      status = `<span class="badge tone-good">${ic("check")} Fixed · closed by scanner</span>`;
+      sub = `Closed 5 days after first seen. Within the 7-day SLA.`;
+      rule = "Rule 1 · auto-close"; ruleText = "A finding is only auto-marked fixed when the scan could actually see that it's gone: OSV answered for every package, the scan didn't fail, the package wasn't skipped, and the same vulnerability isn't still present at another version.";
+      break;
+    case "degraded":
+      steps = [...base, { c: "warn", i: "alert", t: "Rescan degraded", d: "OSV didn't answer for 3 of 312 packages, so absence can't be proven", at: today }];
+      status = `<span class="badge tone-warn">${ic("alert")} Still open · scan degraded</span>`;
+      sub = "Nothing was auto-closed. The next healthy scan will decide.";
+      rule = "Rule 1 · never report what didn't happen"; ruleText = "When the scan couldn't prove absence it's flagged degraded and nothing is auto-closed, even if the fix probably worked.";
+      break;
+    case "stillvuln":
+      steps = [base[0], { c: "info", i: "user", t: "Manual upgrade merged", d: "lodash 4.17.15 → 4.17.19 (outside Everlit)", at: addDays(-2) },
+        { c: "bad", i: "x", t: "Rescan: still vulnerable", d: "CVE-2021-23337 affects < 4.17.21. Finding moved to 4.17.19", at: today }];
+      status = `<span class="badge tone-bad">${ic("x")} Open · moved to 4.17.19</span>`;
+      sub = "Same finding, history and decisions kept. Not closed and replaced by a new one.";
+      rule = "Rule 4 · an upgrade that's still vulnerable isn't a fix"; ruleText = "Upgrading to a version that's still vulnerable to the same advisory moves the existing finding to the new version, keeping its history and any decision on it, instead of closing it and opening a brand-new one.";
+      break;
+    case "otherver":
+      steps = [...base, { c: "bad", i: "x", t: "Rescan: still present elsewhere", d: "lodash 4.17.15 still resolved via some-sdk → lodash@4.17.15", at: today }];
+      status = `<span class="badge tone-bad">${ic("x")} Open · present at another version</span>`;
+      sub = "The direct dependency is fixed, but the vulnerable code still ships.";
+      rule = "Rule 1 · same vulnerability, another version"; ruleText = "A finding isn't closed while the same vulnerability is still present at another version of that package anywhere in the tree.";
+      break;
+    case "reappears":
+      steps = [...base, { c: "good", i: "check", t: "Rescan: fixed", d: "Closed by scanner", at: today },
+        { c: "bad", i: "refresh", t: "Re-detected after a revert", d: "lodash back to 4.17.15 on main", at: addDays(3) }];
+      status = `<span class="badge tone-bad">${ic("refresh")} Reopened · regression</span>`;
+      sub = `Keeps its original first-seen date (${fmtShort(first)}), so the SLA isn't reset by the regression.`;
+      rule = "Rule 3 · regressions reopen"; ruleText = "A finding closed as fixed that shows up again is reopened, keeping its original first-seen date, whether the scanner closed it or a person marked it fixed.";
+      break;
+    case "exception":
+      steps = [base[0], { c: "info", i: "user", t: "Exception requested", d: "Accepted risk requested by the engineering manager", at: addDays(-3) },
+        { c: "good", i: "users", t: "Approved by security", d: "Second reviewer (two-person rule) · expires " + fmtShort(addDays(362)), at: addDays(-2) },
+        { c: "info", i: "refresh", t: "Rescan: still present", d: "Matched to the existing finding. No duplicate opened", at: today }];
+      status = `<span class="badge tone-neutral">${ic("users")} Accepted risk · decision kept</span>`;
+      sub = "The human decision survives every rescan until it expires.";
+      rule = "Rule 2 · decisions survive rescans"; ruleText = "Every existing finding matches its rescan regardless of status, so accepted-risk, false-positive and suppressed decisions survive and are never duplicated by a \"new\" open finding.";
+      break;
+  }
+  const fromNote = VER.from ? `<div class="why-human" style="border-color:var(--info-bd);background:var(--info-bg)">${ic("bot")}<div><b>From the agent squad:</b> PR #${VER.from.pr} (${esc(VER.from.title)}) goes through exactly these rules on its next rescan.${VER.from.mitigation ? " A mitigation leaves the package unchanged, so the finding stays open until security approves the exception." : ""} Shown here with the lodash example.</div></div>` : "";
+  $("#vpanel").innerHTML = fromNote + `
+    <div class="vhead">
+      <div><h3>lodash · payments-api</h3><div class="sub">${esc(sub)}</div></div>
+      <div class="vstatus">${status}</div>
+    </div>
+    <ol class="tl">${steps.map((s, i) => `<li class="${s.c}" style="--i:${i}"><span class="tdot">${ic(s.i)}</span><span><span class="tt">${esc(s.t)}<span class="tdate">${fmtShort(s.at)}</span></span><br><span class="td">${esc(s.d)}</span></span></li>`).join("")}</ol>
+    <div class="rulebox"><span class="label">${esc(rule)}</span>${esc(ruleText)}<br><code class="muted">src/lib/reconcile.ts · planReconcile()</code></div>`;
+}
+
+/* ================================================================ DATA SOURCES (same records as the product's Data Sources page) */
+const SOURCES = [
+  { icon: "layers", name: "OSV.dev", full: "Open Source Vulnerabilities database", by: "Google · open source, OpenSSF OSV schema", url: "https://osv.dev", label: "osv.dev",
+    use: "Matches every dependency version against exact affected and fixed version ranges. Aggregates the GitHub Advisory Database, PyPA, Go, RustSec and other ecosystem databases.",
+    trust: "Open, publicly auditable data in an OpenSSF format that ecosystem maintainers publish to directly. It is the database behind Google's OSV-Scanner.", cadence: "Queried live on every scan" },
+  { icon: "shield", name: "GitHub Advisory Database", full: "GitHub Security Advisories (GHSA)", by: "GitHub security team", url: "https://github.com/advisories", label: "github.com/advisories",
+    use: "Reviewed, package-level advisories (GHSA IDs) with affected and patched versions, received through OSV.",
+    trust: "Curated by GitHub's security team. It is the same data behind GitHub's own security alerts.", cadence: "Through OSV on every scan" },
+  { icon: "building", name: "CVE Program · NIST NVD", full: "Common Vulnerabilities and Exposures · National Vulnerability Database", by: "CVE: MITRE, sponsored by CISA · NVD: NIST (US government)", url: "https://nvd.nist.gov", label: "nvd.nist.gov",
+    use: "Canonical CVE identifiers, references and a CVSS cross-check for every finding.",
+    trust: "CVE IDs are the common language of vendors, scanners and regulators; the NVD is the US government's reference vulnerability database.", cadence: "Linked on every finding" },
+  { icon: "alert", name: "CISA Known Exploited Vulnerabilities", full: "KEV catalog", by: "US Cybersecurity and Infrastructure Security Agency", url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog", label: "cisa.gov/kev",
+    use: "Flags vulnerabilities confirmed exploited in the wild: full exploitability points, a +10 bonus and the 7-day fix deadline.",
+    trust: "Binding Operational Directive 22-01 makes fixing KEV entries mandatory for US federal civilian agencies. Widely used as the industry's fix-first list.", cadence: "Synced daily" },
+  { icon: "gauge", name: "Exploit Prediction Scoring System", full: "EPSS", by: "FIRST (Forum of Incident Response and Security Teams)", url: "https://www.first.org/epss/", label: "first.org/epss",
+    use: "Probability that a CVE is exploited in the next 30 days. Drives exploitability points when a CVE isn't on the KEV list.",
+    trust: "A data-driven model from the same standards body that maintains CVSS, recalculated daily.", cadence: "Synced daily" },
+  { icon: "scroll", name: "CVSS v3.1", full: "Common Vulnerability Scoring System", by: "FIRST standard", url: "https://www.first.org/cvss/", label: "first.org/cvss",
+    use: "Base severity, parsed from each advisory's CVSS vector. Worth up to 45 of the 100 priority points.",
+    trust: "The industry-standard severity scale used by NVD, vendors and auditors.", cadence: "From each advisory" },
+];
+const PIPE = [["file", "Manifest + lockfile", "read from the default branch"], ["layers", "OSV match", "exact affected / fixed ranges"], ["building", "CVE · NVD", "identity, references, CVSS"], ["gauge", "EPSS + KEV", "exploit likelihood and evidence"], ["search", "Import evidence", "is the package used in code?"], ["shield", "Priority 0–100", "context-aware score"], ["scroll", "Policy + SLA", "action, gate and deadline"]];
+function renderSources() {
+  $("#srcGrid").innerHTML = SOURCES.map((x, k) => `<article class="card card-pad feature src reveal" style="--i:${k % 3}"><div class="ficon">${ic(x.icon, "i-lg")}</div><h3>${esc(x.name)}</h3><div class="full" data-noabbr>${esc(x.full)}</div><div class="by">${esc(x.by)}</div>
+    <div class="lbl2">What Everlit uses it for</div><p>${esc(x.use)}</p><div class="lbl2">Why it's trusted</div><p>${esc(x.trust)}</p>
+    <div class="sfoot"><span>${esc(x.cadence)}</span><a href="${x.url}" target="_blank" rel="noopener noreferrer">${esc(x.label)} ↗</a></div></article>`).join("");
+  $("#pipe").innerHTML = PIPE.map(([i, t, d], n) => `<li><span class="pn">${String(n + 1).padStart(2, "0")}</span><b>${ic(i)}${t}</b><span class="d">${d}</span></li>`).join("");
+  $("#gloss").innerHTML = Object.entries(GLOSSARY).sort((a, b) => a[0].localeCompare(b[0], "en", { sensitivity: "base" })).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("");
+}
+
+/* ================================================================ ABBREVIATIONS (same glossary as the product): full form on hover, dotted underline on first use per section */
+const GLOSSARY = {
+  CVE: "Common Vulnerabilities and Exposures", CVSS: "Common Vulnerability Scoring System", EPSS: "Exploit Prediction Scoring System",
+  KEV: "Known Exploited Vulnerabilities (CISA catalog)", CISA: "Cybersecurity and Infrastructure Security Agency (US)", NVD: "National Vulnerability Database",
+  NIST: "National Institute of Standards and Technology (US)", OSV: "Open Source Vulnerabilities", GHSA: "GitHub Security Advisory",
+  FIRST: "Forum of Incident Response and Security Teams", OpenSSF: "Open Source Security Foundation", CISO: "Chief Information Security Officer",
+  SLA: "Service Level Agreement (the fix deadline)", MTTR: "Mean Time To Remediate", PR: "Pull Request", CI: "Continuous Integration",
+  SDLC: "Software Development Life Cycle", VEX: "Vulnerability Exploitability eXchange", SBOM: "Software Bill of Materials", PURL: "Package URL",
+  RBAC: "Role-Based Access Control", SCA: "Software Composition Analysis", SAST: "Static Application Security Testing", IaC: "Infrastructure as Code",
+  FP: "False Positive", POC: "Point of Contact", "PCI-DSS": "Payment Card Industry Data Security Standard", SOX: "Sarbanes-Oxley Act",
+  FFIEC: "Federal Financial Institutions Examination Council", ITGC: "IT General Controls", PyPI: "Python Package Index", PyPA: "Python Packaging Authority",
+  JNDI: "Java Naming and Directory Interface", LDAP: "Lightweight Directory Access Protocol", JDBC: "Java Database Connectivity", JDK: "Java Development Kit",
+  MVC: "Model-View-Controller", XSS: "Cross-Site Scripting", SSRF: "Server-Side Request Forgery", ReDoS: "Regular Expression Denial of Service",
+  JWT: "JSON Web Token", JSON: "JavaScript Object Notation", YAML: "YAML Ain't Markup Language", API: "Application Programming Interface",
+  URL: "Uniform Resource Locator", HTTPS: "Hypertext Transfer Protocol Secure", CSV: "Comma-Separated Values", PDF: "Portable Document Format",
+  SMTP: "Simple Mail Transfer Protocol", PAT: "Personal Access Token", DB: "Database", CLI: "Command-Line Interface", RCE: "Remote Code Execution",
+  AI: "Artificial Intelligence", CWE: "Common Weakness Enumeration", SQL: "Structured Query Language", TLS: "Transport Layer Security",
+  SSO: "Single Sign-On", FTE: "Full-Time Equivalent (one person's working time)",
+  SPDX: "Software Package Data Exchange (SBOM standard)", SHA: "Secure Hash Algorithm",
+  BOM: "Bill of Materials (Maven dependency-version list)", EXIF: "Exchangeable Image File Format", XSRF: "Cross-Site Request Forgery", CSRF: "Cross-Site Request Forgery",
+};
+const ABBR_ALIAS = { PRs: "PR", SLAs: "SLA", APIs: "API", CVEs: "CVE" };
+const ABBR_RE = new RegExp(`\\b(${[...Object.keys(GLOSSARY), ...Object.keys(ABBR_ALIAS)].sort((a, b) => b.length - a.length).map(k => k.replace(/[-.]/g, "\\$&")).join("|")})\\b(?!-[0-9a-z]{4}-)`, "g");
+const ABBR_SKIP = "script,style,code,pre,textarea,select,option,abbr,svg,.console,.mono,.tip,[data-noabbr],input,output";
+function abbrify(root) {
+  if (!root || root.closest?.(ABBR_SKIP)) return;
+  const nodes = [];
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => !n.nodeValue.trim() || !n.parentElement || n.parentElement.closest(ABBR_SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  while (tw.nextNode()) nodes.push(tw.currentNode);
+  nodes.forEach(n => {
+    const t = n.nodeValue; ABBR_RE.lastIndex = 0;
+    if (!ABBR_RE.test(t)) return;
+    ABBR_RE.lastIndex = 0;
+    const frag = document.createDocumentFragment(); let last = 0, m;
+    while ((m = ABBR_RE.exec(t))) {
+      const key = ABBR_ALIAS[m[1]] || m[1];
+      frag.append(t.slice(last, m.index));
+      const a = document.createElement("abbr"); a.title = GLOSSARY[key]; a.dataset.k = key; a.textContent = m[1];
+      frag.append(a); last = m.index + m[1].length;
+    }
+    frag.append(t.slice(last));
+    // inside flex/grid containers keep the text one item, so the wrapped abbreviations don't pick up the container's gap
+    if (/flex|grid/.test(getComputedStyle(n.parentElement).display)) { const w = document.createElement("span"); w.style.display = "inline"; w.append(frag); n.replaceWith(w); } else n.replaceWith(frag);
+  });
+}
+function markFirstAbbr() {
+  $$("header, main > section, footer").forEach(sec => { const seen = new Set(); sec.querySelectorAll("abbr[data-k]").forEach(a => { a.classList.toggle("ab1", !seen.has(a.dataset.k)); seen.add(a.dataset.k); }); });
+}
+function initAbbr() {
+  abbrify(document.body); markFirstAbbr();
+  const pending = new Set(); let queued = false;
+  const flush = () => {
+    queued = false;
+    pending.forEach(el => { if (el.isConnected) abbrify(el); });
+    pending.clear(); mo.takeRecords(); markFirstAbbr();
+  };
+  const mo = new MutationObserver(ms => {
+    ms.forEach(m => { if (m.type === "childList" && m.addedNodes.length) { const t = m.target.nodeType === 1 ? m.target : m.target.parentElement; if (t) pending.add(t); } });
+    if (pending.size && !queued) { queued = true; requestAnimationFrame(flush); }
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
+
+/* ================================================================ PERSONAS */
+const PERSONAS = [
+  ["user", "Developer", "A short, ranked list for my team's repos, and a PR gate that only flags what I introduced."],
+  ["shield", "Security engineer", "Policy as data, exception reviews, and one score I can defend."],
+  ["users", "Engineering manager", "Backlog age, SLA risk and MTTR for the teams I run."],
+  ["building", "CISO / executive", "Trend, exposure and compliance posture without the noise."],
+  ["clipboard", "Compliance", "An audit trail, control mapping and VEX exports on demand."],
+  ["server", "Platform owner", "Roles, connectors and adapters, all in one place."],
+];
+function renderPersonas() {
+  $("#personas").innerHTML = PERSONAS.map(([i, n, d], k) => `<div class="card persona reveal" style="--i:${k % 3}"><span class="pav">${ic(i)}</span><span><b>${n}</b><span class="pd">${esc(d)}</span></span></div>`).join("");
+}
+
+/* ================================================================ chrome: theme, nav, reveal */
+function initTheme() {
+  const btn = $("#themeBtn"), modes = ["system", "light", "dark"], icons = { system: "monitor", light: "sun", dark: "moon" };
+  let mode = "system";
+  try { mode = localStorage.getItem("everlit-theme") || "system"; } catch (_) {}
+  const apply = () => {
+    if (mode === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", mode);
+    btn.innerHTML = ic(icons[mode]); btn.setAttribute("aria-label", `Theme: ${mode}. Click to change`);
+    btn.dataset.tip = `Theme: ${mode}`;
+  };
+  apply();
+  btn.addEventListener("click", () => {
+    mode = modes[(modes.indexOf(mode) + 1) % 3];
+    try { localStorage.setItem("everlit-theme", mode); } catch (_) {}
+    apply();
+    if (window.parent !== window) window.parent.postMessage({ everlit: "theme", mode }, "*");
+  });
+  addEventListener("everlit:theme", e => { mode = e.detail.mode; apply(); });
+  try { if (localStorage.getItem("everlit-roadmap") === "on") document.documentElement.dataset.roadmap = "on"; } catch (_) {}
+}
+function initNav() {
+  const nav = $("#nav");
+  const onScroll = () => nav.classList.toggle("scrolled", scrollY > 8);
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  const links = $$(".nav-links a");
+  const map = new Map(links.map(a => [a.getAttribute("href").slice(1), a]));
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting) { links.forEach(a => a.removeAttribute("aria-current")); const a = map.get(en.target.id); if (a) a.setAttribute("aria-current", "true"); }
+    });
+  }, { rootMargin: "-45% 0px -50% 0px" });
+  $$("main section[id]").forEach(s => io.observe(s));
+}
+function initReveal() {
+  const els = $$(".reveal");
+  if (!("IntersectionObserver" in window)) { els.forEach(e => e.classList.add("in")); return; }
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+  }, { rootMargin: "0px 0px -60px 0px" });
+  els.forEach(e => io.observe(e));
+}
+/* start the agent run / comparison re-rank once, when they first scroll into view */
+function initAutoplay() {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      if (en.target.id === "squad" && !SIM.started) { reduceMotion ? skipSim() : playSim(); }
+      if (en.target.id === "cmpList" && !cmpAutoPlayed && !reduceMotion) {
+        cmpAutoPlayed = true;
+        setTimeout(() => { if (cmpBy === "cvss") { setRadio("rank", "everlit"); cmpBy = "everlit"; reorderCompare(); } }, 900);
+      }
+      io.unobserve(en.target);
+    });
+  }, { threshold: 0.35 });
+  io.observe($("#squad")); io.observe($("#cmpList"));
+}
+
+/* ================================================================ self-checks (mirror src/lib/__tests__/scoring) */
+function selfCheck() {
+  const base = { cvssScore: 9.8, epss: 0.02, kev: false, reachable: true, reachabilityKnown: true, internetFacing: true, criticalityTier: "critical" };
+  const rt = computePriorityScore({ ...base, dependencyScope: "direct-runtime" });
+  const dv = computePriorityScore({ ...base, dependencyScope: "direct-dev" });
+  const tool = computePriorityScore({ ...base, epss: 0.003, internetFacing: false, criticalityTier: "low", dependencyScope: "direct-runtime" });
+  const l4s = computePriorityScore(toInput(PRESETS[0].p));
+  console.assert(rt.severityNormalized === "critical", "9.8 runtime on a critical internet-facing repo should be critical", rt);
+  console.assert(dv.severityNormalized === "medium", "same vuln in a dev dependency should be medium", dv);
+  console.assert(tool.severityNormalized === "medium", "same CVE in an internal low-tier tool should be medium", tool);
+  console.assert(posToEpss(epssToPos(1.2)) === 1.2 && epssToPos(1) === 50, "EPSS slider round-trips");
+  console.assert(l4s.priorityScore === 100, "Log4Shell should score 100", l4s);
+  console.assert(decidePolicy(100, DEFAULT_RULES).action === "auto_pr", "100 → auto_pr");
+  console.assert(slaDaysFor("high", true, DEFAULT_SLA_DAYS) === 7, "KEV tightens a high SLA to 7");
+  console.assert(!roleCan("developer", "approveSuppression"), "developer can't approve exceptions");
+  console.assert(!canDo("sdlc_agent", "mergeFixPr"), "agent can't merge its own PR");
+  console.info("Everlit microsite self-check complete:", { runtime: rt.priorityScore, dev: dv.priorityScore, log4shell: l4s.priorityScore });
+}
+
+/* ================================================================ boot */
+hydrateIcons();
+initTheme();
+initSegs();
+renderHero();
+initLifecycle();
+initPlayground();
+initCompare();
+initAgents();
+initVerify();
+renderPersonas();
+renderSources();
+hydrateIcons();
+initNav();
+initReveal();
+initAutoplay();
+initAbbr();
+selfCheck();
+})();
+</script>
+</body>
+</html>
